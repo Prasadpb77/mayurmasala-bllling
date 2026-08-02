@@ -196,7 +196,7 @@ function printBillHTML(bill, items) {
     }, 300)
   }
 }
-
+ 
 // ── Discount modal ────────────────────────────────────────────────
 function DiscountModal({ bill, onClose, onSaved }) {
   const toast = useToast()
