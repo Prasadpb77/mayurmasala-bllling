@@ -1,13 +1,13 @@
 import { BrowserRouter, Routes, Route, NavLink, useLocation, Navigate } from 'react-router-dom'
 import { ToastProvider } from './components/Toast'
 import { AuthProvider, useAuth } from './lib/AuthContext'
+import { isOwner } from './lib/roles'
 import LoginPage from './pages/LoginPage'
 import HomePage from './pages/HomePage'
 import ItemsPage from './pages/ItemsPage'
 import ScanPage from './pages/ScanPage'
 import DashboardPage from './pages/DashboardPage'
 
-// Loading spinner shown while session is being fetched
 function LoadingScreen() {
   return (
     <div style={{
@@ -25,12 +25,11 @@ function LoadingScreen() {
         animation: 'pulse 1.4s ease-in-out infinite',
       }}>🌶️</div>
       <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.85rem' }}>Loading Mayur Masala…</div>
-      <style>{`@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.7;transform:scale(0.95)} }`}</style>
+      <style>{`@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.7;transform:scale(0.95)}}`}</style>
     </div>
   )
 }
 
-// Requires auth — redirects to /login if not signed in
 function ProtectedRoute({ children }) {
   const { session, loading } = useAuth()
   if (loading) return <LoadingScreen />
@@ -38,7 +37,15 @@ function ProtectedRoute({ children }) {
   return children
 }
 
-// Redirect already-authed users away from /login
+// Only owners can access the dashboard — others see a locked screen
+function OwnerRoute({ children }) {
+  const { session, user, loading } = useAuth()
+  if (loading) return <LoadingScreen />
+  if (!session) return <Navigate to="/login" replace />
+  if (!isOwner(user?.email)) return <AccessDenied />
+  return children
+}
+
 function PublicRoute({ children }) {
   const { session, loading } = useAuth()
   if (loading) return <LoadingScreen />
@@ -46,12 +53,34 @@ function PublicRoute({ children }) {
   return children
 }
 
+function AccessDenied() {
+  return (
+    <div style={{
+      minHeight: '80vh', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      padding: '32px 24px', textAlign: 'center',
+    }}>
+      <div style={{ fontSize: '3.5rem', marginBottom: 16 }}>🔒</div>
+      <h2 style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--ink)', marginBottom: 8 }}>
+        Access Restricted
+      </h2>
+      <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', maxWidth: 320, lineHeight: 1.6 }}>
+        The billing dashboard is only accessible to authorised owners.
+        Please contact the store owner if you need access.
+      </p>
+    </div>
+  )
+}
+
 function Nav() {
   const location = useLocation()
   const { user, signOut } = useAuth()
+  const owner = isOwner(user?.email)
 
-  // Full-screen scanner — no nav
   if (location.pathname === '/scan') return null
+
+  // Short display name — first part of email before @
+  const displayName = user?.email?.split('@')[0] ?? ''
 
   return (
     <nav className="nav">
@@ -70,21 +99,37 @@ function Nav() {
         <NavLink to="/scan" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
           📷 Scan
         </NavLink>
-        <NavLink to="/dashboard" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-          Dashboard
-        </NavLink>
 
-        {/* User menu */}
-        <div style={{ display: 'flex', alignItems: 'center', marginLeft: '8px', paddingLeft: '12px', borderLeft: '1px solid rgba(255,255,255,0.12)', gap: '8px' }}>
-          <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {user?.email}
+        {/* Dashboard only visible to owners */}
+        {owner && (
+          <NavLink to="/dashboard" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            Dashboard
+          </NavLink>
+        )}
+
+        {/* User chip + sign out */}
+        <div style={{
+          display: 'flex', alignItems: 'center',
+          marginLeft: 6, paddingLeft: 10,
+          borderLeft: '1px solid rgba(255,255,255,0.12)', gap: 6,
+        }}>
+          {owner && (
+            <span style={{
+              fontSize: '0.65rem', fontWeight: 700,
+              background: 'var(--teal-glow)', color: 'var(--teal)',
+              border: '1px solid var(--teal)', borderRadius: 99,
+              padding: '1px 7px', letterSpacing: '0.04em',
+            }}>👑</span>
+          )}
+          <span style={{
+            fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)',
+            maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {displayName}
           </span>
-          <button
-            onClick={signOut}
-            className="nav-link"
-            style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.8rem', padding: '6px 10px' }}
-          >
-            Sign out
+          <button onClick={signOut} className="nav-link"
+            style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', padding: '5px 8px' }}>
+            Out
           </button>
         </div>
       </div>
@@ -97,17 +142,12 @@ function AppShell() {
     <div className="app-shell">
       <Nav />
       <Routes>
-        {/* Public */}
-        <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-
-        {/* Protected */}
-        <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
-        <Route path="/items" element={<ProtectedRoute><ItemsPage /></ProtectedRoute>} />
-        <Route path="/scan" element={<ProtectedRoute><ScanPage /></ProtectedRoute>} />
-        <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="/login"     element={<PublicRoute><LoginPage /></PublicRoute>} />
+        <Route path="/"          element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
+        <Route path="/items"     element={<ProtectedRoute><ItemsPage /></ProtectedRoute>} />
+        <Route path="/scan"      element={<ProtectedRoute><ScanPage /></ProtectedRoute>} />
+        <Route path="/dashboard" element={<OwnerRoute><DashboardPage /></OwnerRoute>} />
+        <Route path="*"          element={<Navigate to="/" replace />} />
       </Routes>
     </div>
   )

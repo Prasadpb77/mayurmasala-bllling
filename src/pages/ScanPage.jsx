@@ -3,11 +3,13 @@ import { BrowserMultiFormatReader } from '@zxing/library'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../components/Toast'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../lib/AuthContext'
 
 // Steps: 'start' | 'scanning' | 'result' | 'overview'
 export default function ScanPage() {
   const toast = useToast()
   const navigate = useNavigate()
+  const { user } = useAuth()
 
   const [step, setStep] = useState('start')
   const [customerName, setCustomerName] = useState('')
@@ -133,7 +135,7 @@ export default function ScanPage() {
 
     const { data: bill, error: billErr } = await supabase
       .from('bills')
-      .insert({ customer_name: customerName.trim(), total_amount: total, status: 'pending' })
+      .insert({ customer_name: customerName.trim(), total_amount: total, status: 'pending', created_by: user?.email ?? '' })
       .select()
       .single()
 

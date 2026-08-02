@@ -3,9 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useToast } from '../components/Toast'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/AuthContext'
-
-// ── Owner email — only this user can mark bills as paid ──────────
-const OWNER_EMAIL = 'wanisanjay619@gmail.com'
+import { isOwner } from '../lib/roles'
 
 // ── Shop config ──────────────────────────────────────────────────
 const SHOP = {
@@ -378,8 +376,9 @@ function BillDetailModal({ bill: initialBill, onClose, onRefresh, isOwner }) {
         </div>
 
         {/* Meta */}
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 16 }}>
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 3 }}>
           <div>Bill: {billNo(bill.id)} · {new Date(bill.created_at).toLocaleString()}</div>
+          {bill.created_by && <div>Created by: <span style={{ color: 'var(--teal-dark)', fontWeight: 600 }}>{bill.created_by.split('@')[0]}</span></div>}
           {bill.paid_at && <div>Paid: {new Date(bill.paid_at).toLocaleString()}</div>}
         </div>
 
@@ -431,7 +430,7 @@ export default function DashboardPage() {
   const toast    = useToast()
   const navigate = useNavigate()
   const { user } = useAuth()
-  const isOwner  = user?.email === OWNER_EMAIL
+  const owner = isOwner(user?.email)
 
   const [bills, setBills]           = useState([])
   const [loading, setLoading]       = useState(true)
@@ -486,7 +485,7 @@ export default function DashboardPage() {
           <h1 className="page-title">Billing Dashboard</h1>
           <p className="page-subtitle">
             Manage bills, discounts and payments
-            {isOwner && <span style={{ marginLeft: 8, background: 'var(--teal-glow)', color: 'var(--teal-dark)', fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: 99, border: '1px solid var(--teal)' }}>👑 Owner</span>}
+            {owner && <span style={{ marginLeft: 8, background: 'var(--teal-glow)', color: 'var(--teal-dark)', fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: 99, border: '1px solid var(--teal)' }}>👑 Owner</span>}
           </p>
         </div>
         <button className="btn btn-primary" onClick={() => navigate('/scan')}>+ New Bill</button>
@@ -547,7 +546,7 @@ export default function DashboardPage() {
                 onMouseEnter={e => e.currentTarget.style.background = 'var(--paper)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
               >
-                {/* Customer + time */}
+                {/* Customer + time + creator */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: '0.925rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {bill.customer_name}
@@ -555,6 +554,11 @@ export default function DashboardPage() {
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2 }}>
                     {billNo(bill.id)} · {new Date(bill.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} {new Date(bill.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </div>
+                  {bill.created_by && (
+                    <div style={{ fontSize: '0.68rem', marginTop: 2, color: 'var(--teal-dark)', opacity: 0.85 }}>
+                      🧑 {bill.created_by.split('@')[0]}
+                    </div>
+                  )}
                 </div>
 
                 {/* Amount + discount badge */}
@@ -589,7 +593,7 @@ export default function DashboardPage() {
 
                   {/* Mark paid — owner only, pending only */}
                   {bill.status === 'pending' && (
-                    isOwner ? (
+                    owner ? (
                       <button
                         className="btn btn-sm"
                         style={{ padding: '5px 9px', minHeight: 32, background: 'var(--success)', color: 'var(--white)' }}
@@ -615,7 +619,7 @@ export default function DashboardPage() {
           bill={selectedBill}
           onClose={() => setSelectedBill(null)}
           onRefresh={fetchBills}
-          isOwner={isOwner}
+          isOwner={owner}
         />
       )}
     </div>
