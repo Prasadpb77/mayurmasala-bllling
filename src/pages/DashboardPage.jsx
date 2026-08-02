@@ -2,15 +2,19 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../components/Toast'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../lib/AuthContext'
 
-// ── Shop config — edit this to update all bills ──────────────────
+// ── Owner email — only this user can mark bills as paid ──────────
+const OWNER_EMAIL = 'wanisanjay619@gmail.com'
+
+// ── Shop config ──────────────────────────────────────────────────
 const SHOP = {
-  name:    'Mayur Masala Center',
-  sub:     'and Pooja Bhandar',
-  address: 'Shagun Chowk, Pimpri Area, Shastri Nagar',
+  name:     'Mayur Masala Center',
+  sub:      'and Pooja Bhandar',
+  address:  'Shagun Chowk, Pimpri Area, Shastri Nagar',
   address2: 'Pimpri-Chinchwad, Maharashtra 411017',
-  phone:   '',      // add phone number here if needed
-  tagline: 'Quality Masala & Pooja Items',
+  phone:    '',
+  tagline:  'Quality Masala & Pooja Items',
 }
 
 // ── Bill number formatter ─────────────────────────────────────────
@@ -18,169 +22,181 @@ function billNo(id) {
   return 'MM-' + id.slice(-6).toUpperCase()
 }
 
-// ── PDF bill generator ────────────────────────────────────────────
-async function printBillPDF(bill, items) {
-  const { jsPDF } = await import('jspdf')
-  const doc = new jsPDF({ unit: 'mm', format: [80, 220], orientation: 'portrait' })
-
-  const PW = 80
-  let y = 6
-
-  const center = (text, size, bold = false, color = [0,0,0]) => {
-    doc.setFontSize(size)
-    doc.setFont('helvetica', bold ? 'bold' : 'normal')
-    doc.setTextColor(...color)
-    doc.text(text, PW / 2, y, { align: 'center' })
-    y += size * 0.42
-  }
-  const left = (text, size, bold = false, color = [0,0,0]) => {
-    doc.setFontSize(size)
-    doc.setFont('helvetica', bold ? 'bold' : 'normal')
-    doc.setTextColor(...color)
-    doc.text(text, 4, y)
-    y += size * 0.42
-  }
-  const right = (text, size, bold = false, color = [0,0,0]) => {
-    doc.setFontSize(size)
-    doc.setFont('helvetica', bold ? 'bold' : 'normal')
-    doc.setTextColor(...color)
-    doc.text(text, PW - 4, y, { align: 'right' })
-  }
-  const row = (leftText, rightText, size = 8, bold = false) => {
-    doc.setFontSize(size)
-    doc.setFont('helvetica', bold ? 'bold' : 'normal')
-    doc.setTextColor(0, 0, 0)
-    doc.text(leftText, 4, y)
-    doc.text(rightText, PW - 4, y, { align: 'right' })
-    y += size * 0.42
-  }
-  const dashes = () => {
-    doc.setDrawColor(180, 180, 180)
-    doc.setLineWidth(0.2)
-    doc.setLineDashPattern([1, 1], 0)
-    doc.line(4, y, PW - 4, y)
-    doc.setLineDashPattern([], 0)
-    y += 3
-  }
-  const solidLine = () => {
-    doc.setDrawColor(0, 0, 0)
-    doc.setLineWidth(0.4)
-    doc.line(4, y, PW - 4, y)
-    y += 3
-  }
-  const gap = (mm = 2) => { y += mm }
-
-  // ── Header ──
-  center(SHOP.name, 11, true)
-  center(SHOP.sub, 8)
-  gap(1)
-  center(SHOP.address, 7.5, false, [80, 80, 80])
-  if (SHOP.address2) center(SHOP.address2, 7.5, false, [80, 80, 80])
-  if (SHOP.phone) center('Ph: ' + SHOP.phone, 7.5, false, [80, 80, 80])
-  gap(1)
-  solidLine()
-
-  // ── Bill meta ──
-  const dateStr = new Date(bill.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-  row('Bill No: ' + billNo(bill.id), 'Date: ' + dateStr, 7.5)
-  gap(1)
-  row('Customer:', bill.customer_name, 7.5, false)
-  gap(2)
-  dashes()
-
-  // ── Column headers ──
-  doc.setFontSize(7.5)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(0, 0, 0)
-  doc.text('SN', 4, y)
-  doc.text('Item', 11, y)
-  doc.text('Qty', 44, y, { align: 'center' })
-  doc.text('Rate', 58, y, { align: 'right' })
-  doc.text('Amt', PW - 4, y, { align: 'right' })
-  y += 3.5
-  dashes()
-
-  // ── Line items ──
-  let subtotal = 0
-  items.forEach((item, i) => {
-    const lineTotal = Number(item.item_price) * Number(item.quantity)
-    subtotal += lineTotal
-
-    doc.setFontSize(8)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(0, 0, 0)
-
-    // SN
-    doc.text(String(i + 1), 4, y)
-
-    // Item name — wrap if long
-    const nameLines = doc.splitTextToSize(item.item_name, 28)
-    doc.text(nameLines, 11, y)
-
-    // Qty, rate, amount on first line
-    doc.text(String(item.quantity), 44, y, { align: 'center' })
-    doc.text(Number(item.item_price).toFixed(2), 58, y, { align: 'right' })
-    doc.text(lineTotal.toFixed(2), PW - 4, y, { align: 'right' })
-
-    y += nameLines.length * 3.8 + 1
+// ── Browser print (no download) ──────────────────────────────────
+// Builds an 80mm receipt as an HTML string, opens a hidden iframe,
+// triggers window.print(), then removes the iframe. Works perfectly
+// with thermal printers set as the default/selected printer in
+// Windows — paper size 80mm × continuous, no margins.
+function printBillHTML(bill, items) {
+  const dateStr = new Date(bill.created_at).toLocaleDateString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric'
   })
+  const subtotal   = Number(bill.total_amount) + Number(bill.discount_amount || 0)
+  const discPct    = Number(bill.discount_percent || 0)
+  const discAmt    = Number(bill.discount_amount  || 0)
+  const total      = Number(bill.total_amount)
 
-  dashes()
+  const itemRows = items.map((item, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${item.item_name}</td>
+      <td style="text-align:center">${item.quantity}</td>
+      <td style="text-align:right">${Number(item.item_price).toFixed(2)}</td>
+      <td style="text-align:right">${(item.item_price * item.quantity).toFixed(2)}</td>
+    </tr>`).join('')
 
-  // ── Subtotal ──
-  row('Subtotal', 'Rs. ' + subtotal.toFixed(2), 8, false)
-  gap(1)
+  const discountRow = discPct > 0 ? `
+    <tr class="discount-row">
+      <td colspan="4" style="text-align:right">Discount (${discPct}%)</td>
+      <td style="text-align:right">- ${discAmt.toFixed(2)}</td>
+    </tr>` : ''
 
-  // ── Discount ──
-  const discPct  = Number(bill.discount_percent || 0)
-  const discAmt  = Number(bill.discount_amount  || 0)
-  if (discPct > 0) {
-    doc.setFontSize(8)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(180, 60, 60)
-    doc.text(`Discount (${discPct}%)`, 4, y)
-    doc.text('- Rs. ' + discAmt.toFixed(2), PW - 4, y, { align: 'right' })
-    y += 4
-    gap(1)
+  const paidStamp = bill.status === 'paid'
+    ? `<div class="paid-stamp">** PAID **</div>` : ''
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Bill ${billNo(bill.id)}</title>
+<style>
+  @page {
+    size: 80mm auto;
+    margin: 4mm 3mm;
   }
-
-  solidLine()
-
-  // ── Total ──
-  doc.setFontSize(10)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(0, 0, 0)
-  doc.text('TOTAL', 4, y)
-  doc.setTextColor(0, 130, 100)
-  doc.text('Rs. ' + Number(bill.total_amount).toFixed(2), PW - 4, y, { align: 'right' })
-  y += 5
-  solidLine()
-
-  // ── Status stamp ──
-  if (bill.status === 'paid') {
-    doc.setFontSize(14)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(0, 160, 120)
-    doc.text('** PAID **', PW / 2, y + 4, { align: 'center' })
-    y += 9
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 11px;
+    width: 74mm;
+    color: #000;
+    background: #fff;
   }
+  .header { text-align: center; margin-bottom: 6px; }
+  .shop-name { font-size: 14px; font-weight: bold; letter-spacing: 0.5px; }
+  .shop-sub  { font-size: 11px; font-weight: bold; }
+  .shop-addr { font-size: 9.5px; color: #444; margin-top: 2px; }
+  .shop-phone { font-size: 9.5px; color: #444; }
 
-  // ── Footer ──
-  gap(2)
-  center('Thank you for shopping with us!', 7.5, false, [100, 100, 100])
-  gap(1)
-  center(SHOP.tagline, 7, false, [140, 140, 140])
-  gap(2)
-  center('- - - - - - - - - -', 7, false, [200, 200, 200])
+  .divider-solid { border: none; border-top: 1.5px solid #000; margin: 5px 0; }
+  .divider-dash  { border: none; border-top: 1px dashed #999; margin: 4px 0; }
 
-  // Resize page to content
-  const finalH = Math.min(Math.max(y + 8, 100), 297)
-  const resized = new jsPDF({ unit: 'mm', format: [80, finalH], orientation: 'portrait' })
-  resized.deletePage(1)
-  resized.addPage([80, finalH])
+  .meta { font-size: 10px; margin-bottom: 4px; }
+  .meta-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
 
-  // Re-draw on correctly-sized page — just save the original doc which auto-sizes
-  doc.save(`bill-${billNo(bill.id)}-${bill.customer_name.replace(/\s+/g, '-')}.pdf`)
+  table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+  th { font-size: 9.5px; font-weight: bold; padding: 2px 0; border-bottom: 1px dashed #999; }
+  td { font-size: 10px; padding: 2.5px 0; vertical-align: top; }
+  td:first-child { width: 14px; }
+  td:nth-child(2) { padding-right: 4px; }
+  td:nth-child(3) { width: 22px; }
+  td:nth-child(4) { width: 34px; }
+  td:nth-child(5) { width: 36px; }
+
+  .subtotal-row td { padding-top: 4px; font-size: 10px; color: #333; }
+  .discount-row td { color: #cc0000; font-size: 10px; }
+
+  .total-row { border-top: 1.5px solid #000; margin-top: 2px; }
+  .total-row td { font-size: 13px; font-weight: bold; padding-top: 5px; }
+
+  .paid-stamp {
+    text-align: center;
+    font-size: 16px;
+    font-weight: bold;
+    color: #008060;
+    letter-spacing: 1px;
+    margin: 6px 0 2px;
+  }
+  .footer {
+    text-align: center;
+    font-size: 9px;
+    color: #666;
+    margin-top: 8px;
+    line-height: 1.6;
+  }
+  .footer .tagline { font-size: 8.5px; color: #999; }
+  .cut-line { text-align: center; font-size: 8px; color: #bbb; margin-top: 8px; letter-spacing: 2px; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="shop-name">${SHOP.name}</div>
+    <div class="shop-sub">${SHOP.sub}</div>
+    <div class="shop-addr">${SHOP.address}</div>
+    <div class="shop-addr">${SHOP.address2}</div>
+    ${SHOP.phone ? `<div class="shop-phone">Ph: ${SHOP.phone}</div>` : ''}
+  </div>
+
+  <hr class="divider-solid">
+
+  <div class="meta">
+    <div class="meta-row">
+      <span><b>Bill No:</b> ${billNo(bill.id)}</span>
+      <span><b>Date:</b> ${dateStr}</span>
+    </div>
+    <div class="meta-row">
+      <span><b>Customer:</b> ${bill.customer_name}</span>
+    </div>
+  </div>
+
+  <hr class="divider-dash">
+
+  <table>
+    <thead>
+      <tr>
+        <th style="text-align:left">SN</th>
+        <th style="text-align:left">Item</th>
+        <th style="text-align:center">Qty</th>
+        <th style="text-align:right">Rate</th>
+        <th style="text-align:right">Amt</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${itemRows}
+      <tr class="subtotal-row">
+        <td colspan="4" style="text-align:right"><b>Subtotal</b></td>
+        <td style="text-align:right"><b>${subtotal.toFixed(2)}</b></td>
+      </tr>
+      ${discountRow}
+    </tbody>
+  </table>
+
+  <hr class="divider-solid">
+
+  <table class="total-row">
+    <tr>
+      <td><b>TOTAL</b></td>
+      <td style="text-align:right"><b>Rs. ${total.toFixed(2)}</b></td>
+    </tr>
+  </table>
+
+  ${paidStamp}
+
+  <div class="footer">
+    Thank you for shopping with us!<br>
+    <span class="tagline">${SHOP.tagline}</span>
+  </div>
+
+  <div class="cut-line">- - - - - - - - - - - - - -</div>
+</body>
+</html>`
+
+  // Create hidden iframe, write bill HTML, print, then remove
+  const iframe = document.createElement('iframe')
+  iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;'
+  document.body.appendChild(iframe)
+
+  iframe.contentDocument.open()
+  iframe.contentDocument.write(html)
+  iframe.contentDocument.close()
+
+  iframe.onload = () => {
+    setTimeout(() => {
+      iframe.contentWindow.focus()
+      iframe.contentWindow.print()
+      setTimeout(() => document.body.removeChild(iframe), 1000)
+    }, 300)
+  }
 }
 
 // ── Discount modal ────────────────────────────────────────────────
@@ -189,16 +205,16 @@ function DiscountModal({ bill, onClose, onSaved }) {
   const [pct, setPct] = useState(Number(bill.discount_percent || 0))
   const [saving, setSaving] = useState(false)
 
-  const subtotal = Number(bill.total_amount) + Number(bill.discount_amount || 0)
+  const subtotal    = Number(bill.total_amount) + Number(bill.discount_amount || 0)
   const discountAmt = (subtotal * pct) / 100
-  const newTotal = subtotal - discountAmt
+  const newTotal    = subtotal - discountAmt
 
   const handleSave = async () => {
     setSaving(true)
     const { error } = await supabase.from('bills').update({
       discount_percent: pct,
-      discount_amount: discountAmt,
-      total_amount: newTotal,
+      discount_amount:  discountAmt,
+      total_amount:     newTotal,
     }).eq('id', bill.id)
     if (error) toast('Failed to apply discount', 'error')
     else { toast(`Discount of ${pct}% (₹${discountAmt.toFixed(2)}) applied!`); onSaved(); onClose() }
@@ -267,12 +283,11 @@ function DiscountModal({ bill, onClose, onSaved }) {
 }
 
 // ── Bill detail modal ─────────────────────────────────────────────
-function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
-  const [bill, setBill] = useState(initialBill)
-  const [items, setItems] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [marking, setMarking] = useState(false)
-  const [printing, setPrinting] = useState(false)
+function BillDetailModal({ bill: initialBill, onClose, onRefresh, isOwner }) {
+  const [bill, setBill]           = useState(initialBill)
+  const [items, setItems]         = useState([])
+  const [loading, setLoading]     = useState(true)
+  const [marking, setMarking]     = useState(false)
   const [showDiscount, setShowDiscount] = useState(false)
   const toast = useToast()
 
@@ -292,17 +307,15 @@ function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
 
   const handleMarkPaid = async () => {
     setMarking(true)
-    const { error } = await supabase.from('bills').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', bill.id)
+    const { error } = await supabase.from('bills')
+      .update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', bill.id)
     if (error) toast('Failed to update', 'error')
     else { toast(`₹${Number(bill.total_amount).toFixed(2)} received from ${bill.customer_name}!`); reloadBill(); onClose() }
     setMarking(false)
   }
 
-  const handlePrint = async () => {
-    setPrinting(true)
-    try { await printBillPDF(bill, items) }
-    catch (e) { toast('Failed to generate PDF', 'error') }
-    setPrinting(false)
+  const handlePrint = () => {
+    if (!loading) printBillHTML(bill, items)
   }
 
   const subtotal = Number(bill.total_amount) + Number(bill.discount_amount || 0)
@@ -345,7 +358,7 @@ function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
             </div>
           ))}
 
-          {/* Subtotal / discount / total */}
+          {/* Totals */}
           <div style={{ paddingTop: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: 4 }}>
               <span>Subtotal</span>
@@ -374,32 +387,40 @@ function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {bill.status === 'pending' && (
             <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn-secondary btn-full btn-sm"
-                onClick={() => setShowDiscount(true)}>
+              {/* Discount — any user */}
+              <button className="btn btn-secondary btn-full btn-sm" onClick={() => setShowDiscount(true)}>
                 🏷️ {Number(bill.discount_percent) > 0 ? `Discount (${bill.discount_percent}%)` : 'Add Discount'}
               </button>
-              <button className="btn btn-full btn-sm"
-                style={{ background: 'var(--success)', color: 'var(--white)' }}
-                onClick={handleMarkPaid} disabled={marking}>
-                {marking ? '⏳…' : '💰 Mark Paid'}
-              </button>
+              {/* Mark paid — owner only */}
+              {isOwner ? (
+                <button
+                  className="btn btn-full btn-sm"
+                  style={{ background: 'var(--success)', color: 'var(--white)' }}
+                  onClick={handleMarkPaid} disabled={marking}
+                >
+                  {marking ? '⏳…' : '💰 Mark Paid'}
+                </button>
+              ) : (
+                <div
+                  title={`Only the owner (${OWNER_EMAIL}) can mark bills as paid`}
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--paper)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-sm)', fontSize: '0.78rem', color: 'var(--text-muted)', padding: '6px 8px', textAlign: 'center', cursor: 'not-allowed' }}
+                >
+                  🔒 Owner only
+                </div>
+              )}
             </div>
           )}
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-secondary btn-full btn-sm" onClick={onClose}>Close</button>
-            <button className="btn btn-dark btn-full btn-sm" onClick={handlePrint} disabled={printing || loading}>
-              {printing ? '⏳ Generating…' : '🖨️ Print Bill'}
+            <button className="btn btn-dark btn-full btn-sm" onClick={handlePrint} disabled={loading}>
+              🖨️ Print Bill
             </button>
           </div>
         </div>
       </div>
 
       {showDiscount && (
-        <DiscountModal
-          bill={bill}
-          onClose={() => setShowDiscount(false)}
-          onSaved={reloadBill}
-        />
+        <DiscountModal bill={bill} onClose={() => setShowDiscount(false)} onSaved={reloadBill} />
       )}
     </div>
   )
@@ -407,11 +428,14 @@ function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
 
 // ── Dashboard page ────────────────────────────────────────────────
 export default function DashboardPage() {
-  const toast = useToast()
+  const toast    = useToast()
   const navigate = useNavigate()
-  const [bills, setBills] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('all')
+  const { user } = useAuth()
+  const isOwner  = user?.email === OWNER_EMAIL
+
+  const [bills, setBills]           = useState([])
+  const [loading, setLoading]       = useState(true)
+  const [filter, setFilter]         = useState('all')
   const [selectedBill, setSelectedBill] = useState(null)
   const [printingId, setPrintingId] = useState(null)
 
@@ -435,9 +459,9 @@ export default function DashboardPage() {
     setPrintingId(bill.id)
     try {
       const { data: items } = await supabase.from('bill_items').select('*').eq('bill_id', bill.id)
-      await printBillPDF(bill, items || [])
-    } catch (err) {
-      toast('Failed to generate PDF', 'error')
+      printBillHTML(bill, items || [])
+    } catch {
+      toast('Failed to print', 'error')
     }
     setPrintingId(null)
   }
@@ -450,7 +474,7 @@ export default function DashboardPage() {
     else { toast(`₹${Number(bill.total_amount).toFixed(2)} received from ${bill.customer_name}!`); fetchBills() }
   }
 
-  const filtered = bills.filter(b => filter === 'all' ? true : b.status === filter)
+  const filtered     = bills.filter(b => filter === 'all' ? true : b.status === filter)
   const totalPending = bills.filter(b => b.status === 'pending').reduce((s, b) => s + Number(b.total_amount), 0)
   const totalPaid    = bills.filter(b => b.status === 'paid').reduce((s, b) => s + Number(b.total_amount), 0)
   const pendingCount = bills.filter(b => b.status === 'pending').length
@@ -460,7 +484,10 @@ export default function DashboardPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 12, flexWrap: 'wrap' }}>
         <div>
           <h1 className="page-title">Billing Dashboard</h1>
-          <p className="page-subtitle">Manage bills, discounts and payments</p>
+          <p className="page-subtitle">
+            Manage bills, discounts and payments
+            {isOwner && <span style={{ marginLeft: 8, background: 'var(--teal-glow)', color: 'var(--teal-dark)', fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: 99, border: '1px solid var(--teal)' }}>👑 Owner</span>}
+          </p>
         </div>
         <button className="btn btn-primary" onClick={() => navigate('/scan')}>+ New Bill</button>
       </div>
@@ -495,7 +522,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Bills */}
+      {/* Bills list */}
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         {loading ? (
           <div className="empty-state"><div className="empty-state-icon">⏳</div><div className="empty-state-title">Loading…</div></div>
@@ -512,8 +539,8 @@ export default function DashboardPage() {
                 key={bill.id}
                 onClick={() => setSelectedBill(bill)}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '14px 16px',
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '13px 16px',
                   borderBottom: idx < filtered.length - 1 ? '1px solid var(--border)' : 'none',
                   cursor: 'pointer', transition: 'background 0.1s',
                 }}
@@ -525,33 +552,31 @@ export default function DashboardPage() {
                   <div style={{ fontWeight: 700, fontSize: '0.925rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {bill.customer_name}
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2 }}>
                     {billNo(bill.id)} · {new Date(bill.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} {new Date(bill.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </div>
 
-                {/* Amount + discount */}
+                {/* Amount + discount badge */}
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
                   <div style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '0.95rem' }}>
                     ₹{Number(bill.total_amount).toFixed(2)}
                   </div>
                   {Number(bill.discount_percent) > 0 && (
-                    <div style={{ fontSize: '0.7rem', color: 'var(--danger)' }}>
-                      -{bill.discount_percent}% off
-                    </div>
+                    <div style={{ fontSize: '0.68rem', color: 'var(--danger)' }}>-{bill.discount_percent}% off</div>
                   )}
                 </div>
 
-                {/* Status badge */}
+                {/* Status */}
                 <div style={{ flexShrink: 0 }}>
                   <span className={`badge badge-${bill.status}`}>
-                    {bill.status === 'paid' ? '✓ Paid' : '⏳'}
+                    {bill.status === 'paid' ? '✓' : '⏳'}
                   </span>
                 </div>
 
                 {/* Row actions */}
                 <div style={{ display: 'flex', gap: 5, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                  {/* Print */}
+                  {/* Print — everyone */}
                   <button
                     className="btn btn-sm btn-dark"
                     style={{ padding: '5px 9px', minHeight: 32 }}
@@ -562,16 +587,21 @@ export default function DashboardPage() {
                     {printingId === bill.id ? '⏳' : '🖨️'}
                   </button>
 
-                  {/* Mark paid (only if pending) */}
+                  {/* Mark paid — owner only, pending only */}
                   {bill.status === 'pending' && (
-                    <button
-                      className="btn btn-sm"
-                      style={{ padding: '5px 9px', minHeight: 32, background: 'var(--success)', color: 'var(--white)' }}
-                      title="Mark as paid"
-                      onClick={e => handleQuickPaid(e, bill)}
-                    >
-                      💰
-                    </button>
+                    isOwner ? (
+                      <button
+                        className="btn btn-sm"
+                        style={{ padding: '5px 9px', minHeight: 32, background: 'var(--success)', color: 'var(--white)' }}
+                        title="Mark as paid"
+                        onClick={e => handleQuickPaid(e, bill)}
+                      >💰</button>
+                    ) : (
+                      <div
+                        title="Only the owner can mark bills as paid"
+                        style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--paper)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--border)', fontSize: '0.85rem', cursor: 'not-allowed' }}
+                      >🔒</div>
+                    )
                   )}
                 </div>
               </div>
@@ -585,6 +615,7 @@ export default function DashboardPage() {
           bill={selectedBill}
           onClose={() => setSelectedBill(null)}
           onRefresh={fetchBills}
+          isOwner={isOwner}
         />
       )}
     </div>
