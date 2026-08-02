@@ -4,6 +4,120 @@ import { supabase } from '../lib/supabase'
 import { useToast } from '../components/Toast'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/AuthContext'
+function ManualItemRow({ onAdd }) {
+  const [name, setName]   = useState('')
+  const [price, setPrice] = useState('')
+  const [qty, setQty]     = useState(1)
+  const [open, setOpen]   = useState(false)
+  const toast = useToast()
+
+  const handleAdd = () => {
+    if (!name.trim())              return toast('Enter item name', 'error')
+    const p = parseFloat(price)
+    if (!price || isNaN(p) || p <= 0) return toast('Enter a valid price', 'error')
+    onAdd({ name: name.trim(), price: p, qty })
+    setName(''); setPrice(''); setQty(1); setOpen(false)
+    toast(`"${name.trim()}" added manually`)
+  }
+
+  return (
+    <div style={{
+      background: 'var(--white)',
+      border: '1.5px solid var(--border)',
+      borderRadius: 'var(--radius)',
+      overflow: 'hidden',
+    }}>
+      {/* Toggle header */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '13px 16px', background: 'none', border: 'none', cursor: 'pointer',
+          fontFamily: 'inherit',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: '1.1rem' }}>✏️</span>
+          <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--ink)' }}>Add item manually</span>
+        </div>
+        <span style={{ color: 'var(--text-muted)', fontSize: '1.1rem', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+          ▾
+        </span>
+      </button>
+
+      {/* Expandable form */}
+      {open && (
+        <div style={{ padding: '0 14px 16px', borderTop: '1px solid var(--border)' }}>
+          <div style={{ paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+            {/* Name */}
+            <div>
+              <label className="form-label">Item Name</label>
+              <input
+                className="form-input"
+                placeholder="e.g. Loose Haldi 100g"
+                value={name}
+                autoFocus
+                onChange={e => setName(e.target.value)}
+              />
+            </div>
+
+            {/* Price + Qty in a row */}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ flex: 1 }}>
+                <label className="form-label">Price (₹)</label>
+                <input
+                  className="form-input"
+                  type="number" min="0" step="0.50"
+                  placeholder="0.00"
+                  value={price}
+                  onChange={e => setPrice(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleAdd()}
+                />
+              </div>
+              <div style={{ width: 90 }}>
+                <label className="form-label">Qty</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    style={{ width: 32, padding: 0, flexShrink: 0 }}
+                    onClick={() => setQty(q => Math.max(1, q - 1))}
+                  >−</button>
+                  <input
+                    className="form-input"
+                    type="number" min="1"
+                    value={qty}
+                    onChange={e => setQty(Math.max(1, parseInt(e.target.value) || 1))}
+                    style={{ textAlign: 'center', padding: '12px 4px', fontWeight: 700 }}
+                  />
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    style={{ width: 32, padding: 0, flexShrink: 0 }}
+                    onClick={() => setQty(q => q + 1)}
+                  >+</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Preview */}
+            {name && price && !isNaN(parseFloat(price)) && (
+              <div style={{ background: 'var(--paper)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
+                <span>{name} × {qty}</span>
+                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: 'var(--ink)' }}>
+                  ₹{(parseFloat(price) * qty).toFixed(2)}
+                </span>
+              </div>
+            )}
+
+            <button className="btn btn-primary btn-full" onClick={handleAdd}>
+              + Add to Bill
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 // Steps: 'start' | 'scanning' | 'result' | 'overview'
 export default function ScanPage() {
@@ -367,58 +481,93 @@ export default function ScanPage() {
   // ─── Step: Overview ────────────────────────────────
   if (step === 'overview') {
     return (
-      <div style={{ minHeight: '100vh', background: 'var(--paper)' }}>
+      <div style={{ minHeight: '100vh', minHeight: '100dvh', background: 'var(--paper)' }}>
+
         {/* Dark header */}
-        <div style={{ background: 'var(--ink)', padding: '24px', textAlign: 'center' }}>
-          <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Customer</div>
-          <div style={{ color: 'var(--white)', fontSize: '1.5rem', fontWeight: 700, marginTop: '4px' }}>{customerName}</div>
-          <div style={{ color: 'var(--teal)', fontSize: '2.5rem', fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', marginTop: '8px' }}>
+        <div style={{
+          background: 'var(--ink)',
+          padding: `calc(20px + var(--sat, 0px)) 20px 20px`,
+          textAlign: 'center',
+        }}>
+          <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Customer</div>
+          <div style={{ color: 'var(--white)', fontSize: '1.5rem', fontWeight: 700, marginTop: 4 }}>{customerName}</div>
+          <div style={{ color: 'var(--teal)', fontSize: '2.2rem', fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', marginTop: 6 }}>
             ₹{cartTotal.toFixed(2)}
           </div>
-          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.875rem', marginTop: '4px' }}>
+          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.825rem', marginTop: 4 }}>
             {cartCount} item{cartCount !== 1 ? 's' : ''} · {cart.length} product{cart.length !== 1 ? 's' : ''}
           </div>
         </div>
 
-        {/* Items list */}
-        <div style={{ padding: '20px', maxWidth: 520, margin: '0 auto' }}>
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            {cart.map((c, i) => (
+        <div style={{ padding: '16px', maxWidth: 520, margin: '0 auto' }}>
+
+          {/* ── Manual item add card ── */}
+          <ManualItemRow onAdd={(item) => {
+            setCart(prev => {
+              const key = `manual-${item.name.toLowerCase().trim()}`
+              const existing = prev.find(c => c.item.barcode === key)
+              if (existing) return prev.map(c => c.item.barcode === key ? { ...c, qty: c.qty + item.qty } : c)
+              return [...prev, { item: { ...item, barcode: key, id: key }, qty: item.qty }]
+            })
+          }} />
+
+          {/* ── Cart items ── */}
+          <div className="card" style={{ padding: 0, overflow: 'hidden', marginTop: 12 }}>
+            {cart.length === 0 ? (
+              <div className="empty-state" style={{ padding: '24px' }}>
+                <div className="empty-state-icon">🛒</div>
+                <div className="empty-state-title">Cart is empty</div>
+                <div className="empty-state-text">Scan items or add manually above</div>
+              </div>
+            ) : cart.map((c, i) => (
               <div key={c.item.barcode} style={{
-                display: 'flex',
-                alignItems: 'center',
-                padding: '14px 18px',
+                display: 'flex', alignItems: 'center',
+                padding: '12px 14px',
                 borderBottom: i < cart.length - 1 ? '1px solid var(--border)' : 'none',
-                gap: '12px'
+                gap: 10,
               }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{c.item.name}</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace' }}>
-                    ₹{c.item.price.toFixed(2)} × {c.qty}
+                {/* Manual item indicator */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {c.item.name}
+                    </div>
+                    {String(c.item.barcode).startsWith('manual-') && (
+                      <span style={{ fontSize: '0.6rem', fontWeight: 700, background: '#fef3c7', color: '#92400e', borderRadius: 99, padding: '1px 6px', flexShrink: 0 }}>
+                        MANUAL
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace', marginTop: 2 }}>
+                    ₹{Number(c.item.price).toFixed(2)} × {c.qty}
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+
+                {/* Qty controls */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <button
-                    style={{ width: 28, height: 28, borderRadius: '50%', border: '1.5px solid var(--border)', background: 'none', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}
+                    style={{ width: 30, height: 30, borderRadius: '50%', border: '1.5px solid var(--border)', background: 'none', cursor: 'pointer', fontSize: '1.1rem', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     onClick={() => handleRemoveCartItem(c.item.barcode)}
                   >−</button>
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, minWidth: 24, textAlign: 'center' }}>{c.qty}</span>
+                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, minWidth: 22, textAlign: 'center', fontSize: '0.95rem' }}>{c.qty}</span>
                   <button
-                    style={{ width: 28, height: 28, borderRadius: '50%', border: '1.5px solid var(--border)', background: 'none', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}
+                    style={{ width: 30, height: 30, borderRadius: '50%', border: '1.5px solid var(--border)', background: 'none', cursor: 'pointer', fontSize: '1.1rem', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     onClick={() => setCart(prev => prev.map(cc => cc.item.barcode === c.item.barcode ? { ...cc, qty: cc.qty + 1 } : cc))}
                   >+</button>
                 </div>
-                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, minWidth: 80, textAlign: 'right' }}>
-                  ₹{(c.item.price * c.qty).toFixed(2)}
+
+                {/* Line total */}
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '0.9rem', minWidth: 72, textAlign: 'right' }}>
+                  ₹{(Number(c.item.price) * c.qty).toFixed(2)}
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Actions */}
-          <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+          {/* ── Actions ── */}
+          <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
             <button className="btn btn-secondary btn-full" onClick={() => setStep('scanning')}>
-              + Scan More
+              📷 Scan More
             </button>
             <button
               className="btn btn-primary btn-full btn-lg"
@@ -429,8 +578,8 @@ export default function ScanPage() {
             </button>
           </div>
 
-          <div style={{ textAlign: 'center', marginTop: '12px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-            Adjust quantities above · Submit to send to billing counter
+          <div style={{ textAlign: 'center', marginTop: 10, color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+            Adjust quantities · Add items manually · Submit when ready
           </div>
         </div>
       </div>

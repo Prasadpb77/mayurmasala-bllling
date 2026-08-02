@@ -59,47 +59,47 @@ function printBillHTML(bill, items) {
 <title>Bill ${billNo(bill.id)}</title>
 <style>
   @page {
-    size: 80mm auto;
-    margin: 4mm 3mm;
+    size: 58mm auto;
+    margin: 3mm 2mm;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: 'Courier New', Courier, monospace;
     font-size: 11px;
-    width: 74mm;
+    width: 52mm;
     color: #000;
     background: #fff;
   }
   .header { text-align: center; margin-bottom: 6px; }
-  .shop-name { font-size: 14px; font-weight: bold; letter-spacing: 0.5px; }
-  .shop-sub  { font-size: 11px; font-weight: bold; }
-  .shop-addr { font-size: 9.5px; color: #444; margin-top: 2px; }
-  .shop-phone { font-size: 9.5px; color: #444; }
+  .shop-name { font-size: 12px; font-weight: bold; letter-spacing: 0.3px; }
+  .shop-sub  { font-size: 10px; font-weight: bold; }
+  .shop-addr { font-size: 8.5px; color: #444; margin-top: 2px; }
+  .shop-phone { font-size: 8.5px; color: #444; }
 
   .divider-solid { border: none; border-top: 1.5px solid #000; margin: 5px 0; }
   .divider-dash  { border: none; border-top: 1px dashed #999; margin: 4px 0; }
 
-  .meta { font-size: 10px; margin-bottom: 4px; }
-  .meta-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
+  .meta { font-size: 8.5px; margin-bottom: 4px; }
+  .meta-row { display: flex; justify-content: space-between; margin-bottom: 3px; flex-wrap: wrap; gap: 1px; }
 
   table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
-  th { font-size: 9.5px; font-weight: bold; padding: 2px 0; border-bottom: 1px dashed #999; }
-  td { font-size: 10px; padding: 2.5px 0; vertical-align: top; }
-  td:first-child { width: 14px; }
-  td:nth-child(2) { padding-right: 4px; }
-  td:nth-child(3) { width: 22px; }
-  td:nth-child(4) { width: 34px; }
-  td:nth-child(5) { width: 36px; }
+  th { font-size: 8px; font-weight: bold; padding: 2px 0; border-bottom: 1px dashed #999; }
+  td { font-size: 9px; padding: 2px 0; vertical-align: top; }
+  td:first-child { width: 11px; }
+  td:nth-child(2) { padding-right: 3px; }
+  td:nth-child(3) { width: 18px; }
+  td:nth-child(4) { width: 26px; }
+  td:nth-child(5) { width: 28px; }
 
   .subtotal-row td { padding-top: 4px; font-size: 10px; color: #333; }
   .discount-row td { color: #cc0000; font-size: 10px; }
 
   .total-row { border-top: 1.5px solid #000; margin-top: 2px; }
-  .total-row td { font-size: 13px; font-weight: bold; padding-top: 5px; }
+  .total-row td { font-size: 11px; font-weight: bold; padding-top: 4px; }
 
   .paid-stamp {
     text-align: center;
-    font-size: 16px;
+    font-size: 13px;
     font-weight: bold;
     color: #008060;
     letter-spacing: 1px;
@@ -107,12 +107,12 @@ function printBillHTML(bill, items) {
   }
   .footer {
     text-align: center;
-    font-size: 9px;
+    font-size: 8px;
     color: #666;
     margin-top: 8px;
     line-height: 1.6;
   }
-  .footer .tagline { font-size: 8.5px; color: #999; }
+  .footer .tagline { font-size: 7.5px; color: #999; }
   .cut-line { text-align: center; font-size: 8px; color: #bbb; margin-top: 8px; letter-spacing: 2px; }
 </style>
 </head>
