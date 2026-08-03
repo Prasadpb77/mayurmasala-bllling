@@ -54,38 +54,40 @@ function printBill(bill, items) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Bill ${billNo(bill.id)}</title>
   <style>
-    @page { size: 58mm auto; margin: 2mm 1mm; }
+    @page { size: 58mm auto; margin: 2mm 1px; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Courier New', Courier, monospace;
-      font-size: 10px;
+      font-size: 16px;
       width: 56mm;
       color: #000;
       background: #fff;
     }
     .hdr  { text-align: center; margin-bottom: 4px; }
-    .s1   { font-size: 13px; font-weight: bold; }
-    .s2   { font-size: 10px; font-weight: bold; }
-    .s3   { font-size: 8px; color: #333; }
+    .s1   { font-size: 20px; font-weight: bold; }
+    .s2   { font-size: 15px; font-weight: bold; }
+    .s3   { font-size: 12px; color: #333; }
     hr.dl { border: none; border-top: 1.5px solid #000; margin: 3px 0; }
     hr.dd { border: none; border-top: 1px dashed #888; margin: 3px 0; }
-    .meta { font-size: 8.5px; margin-bottom: 2px; }
+    .meta { font-size: 12px; margin-bottom: 2px; }
     .row  { display: flex; justify-content: space-between; }
     table { width: 100%; border-collapse: collapse; }
-    th  { font-size: 8px; font-weight: bold; padding: 2px 0; border-bottom: 1px dashed #888; text-align: left; }
-    td  { font-size: 9px; padding: 1px 0; vertical-align: top; }
+    th  { font-size: 12px; font-weight: bold; padding: 2px 0; border-bottom: 1px dashed #888; text-align: left; }
+    td  { font-size: 13px; padding: 1px 0; vertical-align: top; }
     td.c { text-align: center; width: 16px; }
     td.r { text-align: right; }
     td:nth-child(1) { width: 12px; }
     td:nth-child(4) { width: 30px; }
     td:nth-child(5) { width: 32px; }
-    .sub td  { font-size: 9px; color: #333; padding-top: 3px; }
-    .disc td { color: #c00; font-size: 9px; }
+    .sub td  { font-size: 13px; color: #333; padding-top: 3px; }
+    .disc td { color: #c00; font-size: 13px; }
     .tot     { border-top: 1.5px solid #000; }
-    .tot td  { font-size: 12px; font-weight: bold; padding-top: 3px; }
-    .paid { text-align: center; font-size: 13px; font-weight: bold; color: #007a60; margin: 4px 0 2px; }
-    .ftr  { text-align: center; font-size: 8px; color: #555; margin-top: 6px; line-height: 1.5; }
-    @media print { body { width: 56mm; } }
+    .tot td  { font-size: 18px; font-weight: bold; padding-top: 3px; }
+    .paid { text-align: center; font-size: 20px; font-weight: bold; color: #007a60; margin: 4px 0 2px; }
+    .ftr  { text-align: center; font-size: 12px; color: #555; margin-top: 6px; line-height: 1.5; }
+    @media print {
+      body { width: auto !important; zoom: 1 !important; transform: none !important; }
+    }
   </style>
 </head>
 <body>
