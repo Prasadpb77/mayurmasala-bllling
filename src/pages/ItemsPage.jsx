@@ -75,43 +75,41 @@ async function generateLabelPDF(items, copies) {
     doc.setLineWidth(0.15)
     doc.rect(x, y, LW, LH)
 
-    // Shop name
-    doc.setFontSize(4)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(90, 90, 90)
-    const shopShort = 'MAYUR MASALA CENTER'
-    doc.text(shopShort, x + LW / 2, y + 2.5, { align: 'center' })
-
-    // Item name — truncate to fit 30mm width
+    // Row 1 — Shop name: RED, bold, centered, font 5.5
     doc.setFontSize(5.5)
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(0, 0, 0)
-    const maxChars = 18
-    const name = item.name.length > maxChars ? item.name.slice(0, maxChars - 1) + '…' : item.name
-    doc.text(name, x + LW / 2, y + 6, { align: 'center' })
+    doc.setTextColor(200, 0, 0)
+    doc.text('MAYUR MASALA CENTER', x + LW / 2, y + 3, { align: 'center' })
 
-    // Barcode image
+    // Row 2 — Barcode digits: dark/black, bold, centered, font 6.5
+    doc.setFontSize(6.5)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(20, 20, 20)
+    doc.text(item.barcode, x + LW / 2, y + 6.5, { align: 'center' })
+
+    // Barcode image — sits below the digits
     try {
       const bc = await barcodeToDataURL(item.barcode)
-      // Tight barcode: nearly full width, leaving 1mm each side
-      doc.addImage(bc, 'PNG', x + 1, y + 7, LW - 2, 11)
+      doc.addImage(bc, 'PNG', x + 1, y + 7.5, LW - 2, 10)
     } catch (e) {
       doc.setFontSize(5)
       doc.setTextColor(150)
       doc.text(item.barcode, x + LW / 2, y + 13, { align: 'center' })
     }
 
-    // Price — bottom left, prominent
-    doc.setFontSize(6.5)
+    // Bottom row — Item name: GREEN, bold, left, font 5.5
+    doc.setFontSize(5.5)
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(0, 120, 90)
-    doc.text(`Rs.${Number(item.price).toFixed(2)}`, x + 1.5, y + 22.5)
+    doc.setTextColor(0, 130, 60)
+    const maxChars = 16
+    const name = item.name.length > maxChars ? item.name.slice(0, maxChars - 1) + '…' : item.name
+    doc.text(name, x + 1.5, y + 23)
 
-    // Barcode digits — bottom right, tiny
-    doc.setFontSize(4)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(140, 140, 140)
-    doc.text(item.barcode, x + LW - 1.5, y + 22.5, { align: 'right' })
+    // Bottom row — Price: GREEN, bold, right, font 5.5
+    doc.setFontSize(5.5)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(0, 130, 60)
+    doc.text(`Rs.${Number(item.price).toFixed(2)}`, x + LW - 1.5, y + 23, { align: 'right' })
   }
 
   return doc
