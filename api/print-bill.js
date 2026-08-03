@@ -16,9 +16,9 @@ import { createClient } from '@supabase/supabase-js'
 
 // ── Shop config (keep in sync with DashboardPage.jsx) ─────────────
 const SHOP = {
-  name:    'Mayur Masala Center',
-  sub:     'and Pooja Bhandar',
-  address: 'Shagun Chowk, Pimpri Area, Shastri Nagar',
+  name:    'Mayur Masala',
+  sub:     '& Pooja Bhandar',
+  address: 'Shagun Chowk, Pimpri',
   phone:   '+919359117213',
   tagline: 'Quality Masala & Pooja Items',
 }
@@ -95,7 +95,7 @@ export default async function handler(req, res) {
 
   rows.push(text(`Bill No : ${billNo(bill.id)}`, { bold: 1 }))
   rows.push(text(`Date    : ${dateStr}  ${timeStr}`, { format: 4 }))
-  rows.push(text(`Customer: ${bill.customer_name}`, { bold: 1 }))
+  rows.push(text(`Customer: ${bill.customer_name}`, { format: 4 }))
   if (bill.created_by) {
     rows.push(text(`Staff   : ${bill.created_by.split('@')[0]}`, { format: 4 }))
   }
@@ -115,7 +115,7 @@ export default async function handler(req, res) {
     const name  = pad(item.item_name, 15)
     const qty   = pad(item.quantity,  3, true)
     const amtS  = pad(amt.toFixed(2), 7, true)
-    rows.push(text(`${num} ${name} ${qty} ${amtS}`, { format: 4 }))
+    rows.push(text(`${num} ${name} ${qty} ${amtS}`, { format: 3 }))
   })
 
   rows.push(text(SOLID))
@@ -130,7 +130,7 @@ export default async function handler(req, res) {
     rows.push(text(`Discount (${discPct}%) : -Rs. ${discAmt.toFixed(2)}`, { align: 2 }))
   }
   rows.push(text(SOLID))
-  rows.push(text(`TOTAL : Rs. ${total.toFixed(2)}`, { bold: 1, align: 1, format: 2 }))
+  rows.push(text(`TOTAL : Rs. ${total.toFixed(2)}`, { bold: 1, align: 1, format: 3 }))
   rows.push(text(SOLID))
 
   if (bill.status === 'paid') {
