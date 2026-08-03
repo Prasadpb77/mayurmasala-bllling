@@ -5,23 +5,25 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/AuthContext'
 import { isOwner } from '../lib/roles'
 
-// ── Shop config ──────────────────────────────────────────────────
+// ── Shop config ───────────────────────────────────────────────────
 const SHOP = {
-  name:     'Mayur Masala Center',
-  sub:      'and Pooja Bhandar',
-  address:  'Shagun Chowk, Pimpri Area, Shastri Nagar',
-  address2: 'Pimpri-Chinchwad, Maharashtra 411017',
-  phone:    '',
-  tagline:  'Quality Masala & Pooja Items',
+  name:    'Mayur Masala Center',
+  sub:     'and Pooja Bhandar',
+  address: 'Shagun Chowk, Pimpri Area, Shastri Nagar',
+  address2:'Pimpri-Chinchwad, Maharashtra 411017',
+  phone:   '',
+  tagline: 'Quality Masala & Pooja Items',
 }
 
 function billNo(id) { return 'MM-' + id.slice(-6).toUpperCase() }
 
-// ── Browser print via blob URL ────────────────────────────────────
-// Creates bill as a blob URL, opens it in a new tab, auto-prints.
-// Avoids popup blockers and blank screen issues on Android Chrome.
-function printBillHTML(bill, items) {
+// ── Print receipt ─────────────────────────────────────────────────
+// Builds a 58mm-optimised HTML receipt, opens it in a new tab, and
+// calls window.print() automatically — Android then shows the native
+// print dialog where the paired Bluetooth printer appears directly.
+function printBill(bill, items) {
   const dateStr  = new Date(bill.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+  const timeStr  = new Date(bill.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
   const subtotal = Number(bill.total_amount) + Number(bill.discount_amount || 0)
   const discPct  = Number(bill.discount_percent || 0)
   const discAmt  = Number(bill.discount_amount  || 0)
@@ -43,41 +45,50 @@ function printBillHTML(bill, items) {
     </tr>` : ''
 
   const paidStamp = bill.status === 'paid' ? `<div class="paid">** PAID **</div>` : ''
-  const createdBy = bill.created_by ? `<div>Staff: ${bill.created_by.split('@')[0]}</div>` : ''
+  const staffLine = bill.created_by ? `<div>Staff: ${bill.created_by.split('@')[0]}</div>` : ''
 
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>Bill ${billNo(bill.id)}</title>
-<style>
-  @page { size: 58mm auto; margin: 3mm 2mm; }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Courier New', monospace; font-size: 10px; width: 54mm; color: #000; background: #fff; }
-  .hdr { text-align: center; margin-bottom: 5px; }
-  .s1  { font-size: 13px; font-weight: bold; }
-  .s2  { font-size: 10px; font-weight: bold; }
-  .s3  { font-size: 8.5px; color: #444; }
-  .dl  { border: none; border-top: 1.5px solid #000; margin: 4px 0; }
-  .dd  { border: none; border-top: 1px dashed #999; margin: 3px 0; }
-  .meta { font-size: 8.5px; margin-bottom: 3px; }
-  .row  { display: flex; justify-content: space-between; }
-  table { width: 100%; border-collapse: collapse; }
-  th { font-size: 8px; font-weight: bold; padding: 2px 0; border-bottom: 1px dashed #999; text-align: left; }
-  td { font-size: 9px; padding: 2px 0; vertical-align: top; }
-  td.c { text-align: center; width: 18px; }
-  td.r { text-align: right; }
-  td:nth-child(1) { width: 10px; }
-  td:nth-child(4) { width: 28px; }
-  td:nth-child(5) { width: 30px; }
-  .sub td { font-size: 9px; color: #333; padding-top: 3px; }
-  .disc td { color: #cc0000; font-size: 9px; }
-  .tot { border-top: 1.5px solid #000; }
-  .tot td { font-size: 12px; font-weight: bold; padding-top: 4px; }
-  .paid { text-align: center; font-size: 14px; font-weight: bold; color: #007a60; letter-spacing: 1px; margin: 5px 0 2px; }
-  .ftr  { text-align: center; font-size: 8px; color: #666; margin-top: 7px; line-height: 1.6; }
-  .cut  { text-align: center; font-size: 7px; color: #bbb; margin-top: 7px; letter-spacing: 3px; }
-  @media print {
-    body { width: 54mm; }
-  }
-</style></head><body>
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bill ${billNo(bill.id)}</title>
+  <style>
+    @page { size: 58mm auto; margin: 2mm 1mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 10px;
+      width: 56mm;
+      color: #000;
+      background: #fff;
+    }
+    .hdr  { text-align: center; margin-bottom: 4px; }
+    .s1   { font-size: 13px; font-weight: bold; }
+    .s2   { font-size: 10px; font-weight: bold; }
+    .s3   { font-size: 8px; color: #333; }
+    hr.dl { border: none; border-top: 1.5px solid #000; margin: 3px 0; }
+    hr.dd { border: none; border-top: 1px dashed #888; margin: 3px 0; }
+    .meta { font-size: 8.5px; margin-bottom: 2px; }
+    .row  { display: flex; justify-content: space-between; }
+    table { width: 100%; border-collapse: collapse; }
+    th  { font-size: 8px; font-weight: bold; padding: 2px 0; border-bottom: 1px dashed #888; text-align: left; }
+    td  { font-size: 9px; padding: 1px 0; vertical-align: top; }
+    td.c { text-align: center; width: 16px; }
+    td.r { text-align: right; }
+    td:nth-child(1) { width: 12px; }
+    td:nth-child(4) { width: 30px; }
+    td:nth-child(5) { width: 32px; }
+    .sub td  { font-size: 9px; color: #333; padding-top: 3px; }
+    .disc td { color: #c00; font-size: 9px; }
+    .tot     { border-top: 1.5px solid #000; }
+    .tot td  { font-size: 12px; font-weight: bold; padding-top: 3px; }
+    .paid { text-align: center; font-size: 13px; font-weight: bold; color: #007a60; margin: 4px 0 2px; }
+    .ftr  { text-align: center; font-size: 8px; color: #555; margin-top: 6px; line-height: 1.5; }
+    @media print { body { width: 56mm; } }
+  </style>
+</head>
+<body>
   <div class="hdr">
     <div class="s1">${SHOP.name}</div>
     <div class="s2">${SHOP.sub}</div>
@@ -87,178 +98,55 @@ function printBillHTML(bill, items) {
   </div>
   <hr class="dl">
   <div class="meta">
-    <div class="row"><span><b>Bill:</b> ${billNo(bill.id)}</span><span>${dateStr}</span></div>
+    <div class="row"><span><b>Bill:</b> ${billNo(bill.id)}</span><span>${dateStr} ${timeStr}</span></div>
     <div><b>Customer:</b> ${bill.customer_name}</div>
-    ${createdBy}
+    ${staffLine}
   </div>
   <hr class="dd">
   <table>
-    <thead><tr><th>SN</th><th>Item</th><th class="c">Qty</th><th class="r">Rate</th><th class="r">Amt</th></tr></thead>
+    <thead>
+      <tr><th>#</th><th>Item</th><th class="c">Qty</th><th class="r">Rate</th><th class="r">Amt</th></tr>
+    </thead>
     <tbody>
       ${itemRows}
-      <tr class="sub"><td colspan="4" class="r"><b>Subtotal</b></td><td class="r"><b>${subtotal.toFixed(2)}</b></td></tr>
+      <tr class="sub">
+        <td colspan="4" class="r"><b>Subtotal</b></td>
+        <td class="r"><b>${subtotal.toFixed(2)}</b></td>
+      </tr>
       ${discRow}
     </tbody>
   </table>
   <hr class="dl">
-  <table class="tot"><tr><td><b>TOTAL</b></td><td colspan="4" class="r"><b>Rs. ${total.toFixed(2)}</b></td></tr></table>
+  <table class="tot">
+    <tr>
+      <td><b>TOTAL</b></td>
+      <td colspan="4" class="r"><b>Rs. ${total.toFixed(2)}</b></td>
+    </tr>
+  </table>
   ${paidStamp}
-  <div class="ftr">Thank you for shopping with us!<br><small>${SHOP.tagline}</small></div>
-  <div class="cut">- - - - - - - - - -</div>
-</body></html>`
+  <div class="ftr">
+    Thank you for shopping with us!<br>
+    <small>${SHOP.tagline}</small>
+  </div>
+</body>
+<script>
+  // Auto-trigger Android native print dialog on load.
+  // Receipt Printer Driver intercepts this and routes to
+  // the paired Bluetooth printer — no extra taps needed.
+  window.onload = function() {
+    setTimeout(function() { window.print(); }, 300);
+  };
+</script>
+</html>`
 
-  // Create a blob URL — opens as a real page in new tab, no popup blocker
   const blob = new Blob([html], { type: 'text/html' })
   const url  = URL.createObjectURL(blob)
-  const a    = document.createElement('a')
-  a.href     = url
-  a.target   = '_blank'
-  a.rel      = 'noopener'
-  a.click()
-  // Clean up blob URL after a delay
-  setTimeout(() => URL.revokeObjectURL(url), 30000)
-}
-
-// ── Bluetooth print helpers ───────────────────────────────────────
-const MAC_KEY = 'bt_printer_mac'
-
-function getMac()       { return localStorage.getItem(MAC_KEY) || '' }
-function saveMac(mac)   { localStorage.setItem(MAC_KEY, mac.trim()) }
-
-// Strip non-ASCII — thermal printers speak plain ASCII only.
-// Non-ASCII (₹, Hindi/Marathi, emojis) corrupts the job silently.
-function toAscii(str) {
-  return String(str).replace(/₹/g, 'Rs.').replace(/[^\x20-\x7E\n\r]/g, '')
-}
-
-// KEY BUG FIX: URLSearchParams encodes spaces as "+" not "%20".
-// Many Android apps don't decode "+" back to spaces, so the printer
-// receives garbage and drops it. Use encodeURIComponent directly.
-function firePrint(content) {
-  const mac = getMac()
-  let url = `btprinter://print?content=${encodeURIComponent(content)}&encode_format=UTF-8`
-  if (mac) url += `&device_address=${encodeURIComponent(mac)}`
-  window.location.href = url
-}
-
-function buildReceipt(bill, items) {
-  const dateStr  = new Date(bill.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-  const timeStr  = new Date(bill.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-  const subtotal = Number(bill.total_amount) + Number(bill.discount_amount || 0)
-  const discPct  = Number(bill.discount_percent || 0)
-  const discAmt  = Number(bill.discount_amount  || 0)
-  const total    = Number(bill.total_amount)
-
-  const W     = 32
-  const line  = '-'.repeat(W)
-  const dline = '='.repeat(W)
-  const center = (s) => { const pad = Math.max(0, Math.floor((W - s.length) / 2)); return ' '.repeat(pad) + s }
-  const rAlign = (l, v) => { const gap = W - l.length - v.length; return l + ' '.repeat(Math.max(1, gap)) + v }
-
-  const itemLines = items.map((item, i) => {
-    const name  = toAscii(item.item_name).slice(0, 16)
-    const left  = `${i + 1}. ${name} x${item.quantity}`
-    const right = `Rs.${(item.item_price * item.quantity).toFixed(2)}`
-    return left + ' '.repeat(Math.max(1, W - left.length - right.length)) + right
-  }).join('\n')
-
-  const rows = [
-    center(toAscii(SHOP.name)),
-    center(toAscii(SHOP.sub)),
-    center(toAscii(SHOP.address)),
-    dline,
-    rAlign('Bill: ' + billNo(bill.id), dateStr),
-    'Customer: ' + toAscii(bill.customer_name),
-    bill.created_by ? 'Staff: ' + toAscii(bill.created_by.split('@')[0]) : null,
-    line,
-    'ITEM             QTY      AMT',
-    line,
-    itemLines,
-    line,
-    rAlign('Subtotal', 'Rs.' + subtotal.toFixed(2)),
-    discPct > 0 ? rAlign('Discount (' + discPct + '%)', '- Rs.' + discAmt.toFixed(2)) : null,
-    dline,
-    rAlign('TOTAL', 'Rs.' + total.toFixed(2)),
-    dline,
-    bill.status === 'paid' ? center('** PAID **') : null,
-    '',
-    center('Thank you for shopping!'),
-    center(timeStr),
-    // Paper feed — advances paper past the print head so receipt is visible
-    '\n\n\n\n\n',
-  ].filter(r => r !== null).join('\n')
-
-  return rows
-}
-
-function printBillBluetooth(bill, items) { firePrint(buildReceipt(bill, items)) }
-
-function testPrintBluetooth() {
-  firePrint([
-    '================================',
-    '         TEST PRINT OK          ',
-    '================================',
-    '  Mayur Masala Center           ',
-    '  Printer is working!           ',
-    '\n\n\n\n\n',
-  ].join('\n'))
-}
-
-// ── Printer setup modal ───────────────────────────────────────────
-function PrinterSetupModal({ onClose }) {
-  const [mac, setMac] = useState(getMac())
-  const toast = useToast()
-
-  const handleSave = () => {
-    const cleaned = mac.trim().toUpperCase()
-    // Basic MAC address format validation: XX:XX:XX:XX:XX:XX
-    if (cleaned && !/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(cleaned)) {
-      toast('Enter a valid MAC address like 00:11:22:33:44:55', 'error')
-      return
-    }
-    saveMac(cleaned)
-    toast(cleaned ? 'Printer MAC address saved!' : 'MAC address cleared')
-    onClose()
+  const win  = window.open(url, '_blank')
+  if (!win) {
+    // Fallback if popup blocked — open in same tab
+    window.location.href = url
   }
-
-  return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <div className="modal-title">🖨️ Bluetooth Printer Setup</div>
-        <div className="modal-subtitle">
-          Set your printer MAC address so it connects automatically without asking every time.
-        </div>
-
-        <div style={{ background: 'var(--paper)', borderRadius: 'var(--radius-sm)', padding: '12px 14px', marginBottom: 16, fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
-          <strong>How to find MAC address:</strong><br />
-          Android Settings → Bluetooth → tap your printer name → "Device info" or "Details"
-        </div>
-
-        <div className="form-group">
-          <label className="form-label">Printer MAC Address</label>
-          <input
-            className="form-input"
-            placeholder="00:11:22:33:44:55"
-            value={mac}
-            onChange={e => setMac(e.target.value)}
-            style={{ fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.05em' }}
-            autoFocus
-          />
-        </div>
-
-        {getMac() && (
-          <div style={{ fontSize: '0.78rem', color: 'var(--teal-dark)', marginBottom: 12 }}>
-            ✓ Saved: <strong style={{ fontFamily: 'JetBrains Mono, monospace' }}>{getMac()}</strong>
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-secondary btn-full" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary btn-full" onClick={handleSave}>Save &amp; Close</button>
-        </div>
-      </div>
-    </div>
-  )
+  setTimeout(() => URL.revokeObjectURL(url), 60000)
 }
 
 // ── Discount modal ────────────────────────────────────────────────
@@ -356,8 +244,6 @@ function BillDetailModal({ bill: initialBill, onClose, onRefresh, isOwner }) {
     setMarking(false)
   }
 
-  const handlePrint = () => { if (!loading) printBillHTML(bill, items) }
-
   const subtotal = Number(bill.total_amount) + Number(bill.discount_amount || 0)
 
   return (
@@ -439,26 +325,10 @@ function BillDetailModal({ bill: initialBill, onClose, onRefresh, isOwner }) {
           )}
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-secondary btn-full btn-sm" onClick={onClose}>Close</button>
-            <button className="btn btn-dark btn-full btn-sm" onClick={handlePrint} disabled={loading}>
-              🌐 Browser Print
+            <button className="btn btn-dark btn-full btn-sm" onClick={() => !loading && printBill(bill, items)} disabled={loading}>
+              🖨️ Print Bill
             </button>
           </div>
-          <button
-            className="btn btn-full btn-sm"
-            style={{
-              marginTop: 8,
-              background: '#1a3a2a',
-              color: '#4ade80',
-              border: '1.5px solid #166534',
-              fontWeight: 700,
-              cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.5 : 1,
-            }}
-            disabled={loading}
-            onClick={() => printBillBluetooth(bill, items)}
-          >
-            🖨️ Print via Bluetooth Printer
-          </button>
         </div>
       </div>
       {showDiscount && <DiscountModal bill={bill} onClose={() => setShowDiscount(false)} onSaved={reloadBill} />}
@@ -473,12 +343,11 @@ export default function DashboardPage() {
   const { user } = useAuth()
   const owner    = isOwner(user?.email)
 
-  const [bills, setBills]           = useState([])
-  const [loading, setLoading]       = useState(true)
-  const [filter, setFilter]         = useState('all')
-  const [selectedBill, setSelectedBill]     = useState(null)
-  const [printingId, setPrintingId]         = useState(null)
-  const [showPrinterSetup, setShowPrinterSetup] = useState(false)
+  const [bills, setBills]       = useState([])
+  const [loading, setLoading]   = useState(true)
+  const [filter, setFilter]     = useState('all')
+  const [selectedBill, setSelectedBill] = useState(null)
+  const [printingId, setPrintingId]     = useState(null)
 
   const fetchBills = useCallback(async () => {
     const { data, error } = await supabase.from('bills').select('*').order('created_at', { ascending: false })
@@ -500,7 +369,7 @@ export default function DashboardPage() {
     setPrintingId(bill.id)
     try {
       const { data: items } = await supabase.from('bill_items').select('*').eq('bill_id', bill.id)
-      printBillBluetooth(bill, items || [])
+      printBill(bill, items || [])
     } catch { toast('Failed to print', 'error') }
     setPrintingId(null)
   }
@@ -528,16 +397,7 @@ export default function DashboardPage() {
             {owner && <span style={{ marginLeft: 8, background: 'var(--teal-glow)', color: 'var(--teal-dark)', fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: 99, border: '1px solid var(--teal)' }}>👑 Owner</span>}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowPrinterSetup(true)}
-            title={getMac() ? `Printer: ${getMac()}` : 'Set up printer MAC address'}>
-            {getMac() ? '🖨️ Printer ✓' : '🖨️ Setup Printer'}
-          </button>
-          <button className="btn btn-secondary btn-sm" onClick={testPrintBluetooth}>
-            Test Print
-          </button>
-          <button className="btn btn-primary" onClick={() => navigate('/scan')}>+ New Bill</button>
-        </div>
+        <button className="btn btn-primary" onClick={() => navigate('/scan')}>+ New Bill</button>
       </div>
 
       <div className="stats-row">
@@ -605,9 +465,6 @@ export default function DashboardPage() {
 
       {selectedBill && (
         <BillDetailModal bill={selectedBill} onClose={() => setSelectedBill(null)} onRefresh={fetchBills} isOwner={owner} />
-      )}
-      {showPrinterSetup && (
-        <PrinterSetupModal onClose={() => setShowPrinterSetup(false)} />
       )}
     </div>
   )
