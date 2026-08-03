@@ -16,7 +16,7 @@ function barcodeToDataURL(code) {
   return new Promise((resolve, reject) => {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
     JsBarcode(svg, code, {
-      format: 'CODE128', width: 2, height: 60,
+      format: 'CODE128', width: 2, height: 80,
       displayValue: false, margin: 4,
       background: '#ffffff', lineColor: '#000000',
     })
@@ -38,22 +38,22 @@ function barcodeToDataURL(code) {
 }
 
 // ── Generate PDF with barcode labels ─────────────────────────────
-// Sticker: 30mm wide × 25mm tall — maximises count on A4
-// Layout: 6 cols × 10 rows = 60 stickers/page (3mm margin, 0mm gap — flush)
+// Sticker: 35mm wide × 25mm tall — maximises count on A4
+// Layout: 6 cols × 11 rows = 66 stickers/page (3mm margin, 0mm gap — flush)
 async function generateLabelPDF(items, copies) {
   const { jsPDF } = await import('jspdf')
 
   // Sticker dimensions (mm)
-  const LW = 30, LH = 25
+  const LW = 35, LH = 25
   // Page margins — tiny so stickers pack edge-to-edge
   const MX = 0, MY = 0
   // Zero gap between stickers (cut line only, no spacing)
   const GX = 0, GY = 0
   const PW = 210, PH = 297
 
-  const cols    = Math.floor((PW - MX * 2 + GX) / (LW + GX))  // 7
+  const cols    = Math.floor((PW - MX * 2 + GX) / (LW + GX))  // 6
   const rows    = Math.floor((PH - MY * 2 + GY) / (LH + GY))  // 11
-  const perPage = cols * rows                                    // 77
+  const perPage = cols * rows                                    // 66
 
   const labels = []
   for (const item of items) for (let i = 0; i < copies; i++) labels.push(item)
@@ -75,22 +75,22 @@ async function generateLabelPDF(items, copies) {
     doc.setLineWidth(0.15)
     doc.rect(x, y, LW, LH)
 
-    // Row 1 — Shop name: RED, bold, centered, font 5.5
-    doc.setFontSize(5.5)
+    // Row 1 — Shop name: RED, bold, centered, font 6
+    doc.setFontSize(6)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(200, 0, 0)
-    doc.text('MAYUR MASALA CENTER', x + LW / 2, y + 3, { align: 'center' })
+    doc.text('MAYUR MASALA CENTER', x + LW / 2, y + 2, { align: 'center' })
 
-    // Row 2 — Barcode digits: dark/black, bold, centered, font 6.5
-    doc.setFontSize(6.5)
+    // Row 2 — Barcode digits: BLACK, bold, centered, font 11 (BIG & BOLD)
+    doc.setFontSize(11)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(20, 20, 20)
-    doc.text(item.barcode, x + LW / 2, y + 6.5, { align: 'center' })
+    doc.text(item.barcode, x + LW / 2, y + 6, { align: 'center' })
 
-    // Barcode image — sits below the digits
+    // Barcode image — small, centered below digits
     try {
       const bc = await barcodeToDataURL(item.barcode)
-      doc.addImage(bc, 'PNG', x + 1, y + 7.5, LW - 2, 10)
+      doc.addImage(bc, 'PNG', x + (LW - 24) / 2, y + 8.5, 24, 5)
     } catch (e) {
       doc.setFontSize(5)
       doc.setTextColor(150)
@@ -101,15 +101,15 @@ async function generateLabelPDF(items, copies) {
     doc.setFontSize(5.5)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(0, 130, 60)
-    const maxChars = 16
+    const maxChars = 18
     const name = item.name.length > maxChars ? item.name.slice(0, maxChars - 1) + '…' : item.name
-    doc.text(name, x + 1.5, y + 23)
+    doc.text(name, x + 1.5, y + 16)
 
     // Bottom row — Price: GREEN, bold, right, font 5.5
     doc.setFontSize(5.5)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(0, 130, 60)
-    doc.text(`Rs.${Number(item.price).toFixed(2)}`, x + LW - 1.5, y + 23, { align: 'right' })
+    doc.text(`Rs.${Number(item.price).toFixed(2)}`, x + LW - 1.5, y + 16, { align: 'right' })
   }
 
   return doc
@@ -145,7 +145,7 @@ function PrintModal({ items, title, onClose }) {
       <div className="modal">
         <div className="modal-title">🖨️ {title}</div>
         <div className="modal-subtitle">
-          {items.length === 1 ? items[0].name : `${items.length} items`} — 30×25mm stickers · A4
+          {items.length === 1 ? items[0].name : `${items.length} items`} — 35×25mm stickers · A4
         </div>
 
         {/* Item chips */}
@@ -193,7 +193,7 @@ function PrintModal({ items, title, onClose }) {
         </div>
 
         <div style={{ textAlign: 'center', fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 10 }}>
-          A4 · 7 cols × 11 rows · 30×25mm per sticker · CODE128
+          A4 · 6 cols × 11 rows · 35×25mm per sticker · CODE128
         </div>
       </div>
     </div>
@@ -282,7 +282,7 @@ export default function ItemsPage() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <div>
           <h1 className="page-title">Items & Barcodes</h1>
-          <p className="page-subtitle">PDF sticker sheet · 30×25mm · 77 per A4</p>
+          <p className="page-subtitle">PDF sticker sheet · 35×25mm · 66 per A4</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           <button className="btn btn-secondary"

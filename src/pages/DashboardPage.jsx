@@ -9,8 +9,7 @@ import { isOwner } from '../lib/roles'
 const SHOP = {
   name:    'Mayur Masala Center',
   sub:     'and Pooja Bhandar',
-  address: 'Shagun Chowk, Pimpri Area, Shastri Nagar',
-  address2:'Pimpri-Chinchwad, Maharashtra 411017',
+  address: 'Shagun Chowk, Pimpri',
   phone:   '+919359117213',
   tagline: 'Quality Masala & Pooja Items',
 }
@@ -151,6 +150,21 @@ function printBill(bill, items) {
   setTimeout(() => URL.revokeObjectURL(url), 60000)
 }
 
+// ── Bluetooth thermal printer (via "Bluetooth Print" Android app) ─
+// Tapping the BT Print button fires a my.bluetoothprint.scheme:// deep-link.
+// The Android app intercepts it, fetches the JSON from /api/print-bill,
+// and sends it straight to the paired Bluetooth thermal printer.
+//
+// App: https://play.google.com/store/apps/details?id=mate.bluetoothprint
+// Setup: open the app → Menu → Browser Print → enable toggle.
+function bluetoothPrint(bill) {
+  // Build absolute URL to our Vercel serverless function
+  const apiUrl = `${window.location.origin}/api/print-bill?id=${bill.id}`
+  // Deep-link scheme that launches the Bluetooth Print app on Android
+  const btUrl  = `my.bluetoothprint.scheme://${apiUrl}`
+  window.location.href = btUrl
+}
+
 // ── Discount modal ────────────────────────────────────────────────
 function DiscountModal({ bill, onClose, onSaved }) {
   const toast = useToast()
@@ -253,8 +267,8 @@ function BillDetailModal({ bill: initialBill, onClose, onRefresh, isOwner }) {
       <div className="modal">
         <div style={{ background: 'var(--ink)', borderRadius: 'var(--radius)', padding: '18px 16px', marginBottom: 20, textAlign: 'center' }}>
           <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Customer</div>
-          <div style={{ color: 'var(--white)', fontSize: '1.3rem', fontWeight: 700, marginTop: 3 }}>{bill.customer_name}</div>
-          <div style={{ color: 'var(--teal)', fontSize: '1.8rem', fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', marginTop: 6 }}>
+          <div style={{ color: 'var(--white)', fontSize: '0.9rem', fontWeight: 700, marginTop: 3 }}>{bill.customer_name}</div>
+          <div style={{ color: 'var(--teal)', fontSize: '1.1rem', fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', marginTop: 6 }}>
             ₹{Number(bill.total_amount).toFixed(2)}
           </div>
           {Number(bill.discount_percent) > 0 && (
@@ -267,22 +281,22 @@ function BillDetailModal({ bill: initialBill, onClose, onRefresh, isOwner }) {
           </div>
         </div>
 
-        <div style={{ marginBottom: 16 }}>
-          {loading ? (
-            <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 16 }}>Loading…</div>
-          ) : items.map((item, i) => (
-            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: '1px solid var(--border)' }}>
-              <div>
-                <div style={{ fontWeight: 500, fontSize: '0.875rem' }}>{i + 1}. {item.item_name}</div>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace' }}>
-                  ₹{Number(item.item_price).toFixed(2)} × {item.quantity}
+            <div style={{ marginBottom: 16 }}>
+              {loading ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 16 }}>Loading…</div>
+              ) : items.map((item, i) => (
+                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: '1px solid var(--border)' }}>
+                  <div>
+                    <div style={{ fontWeight: 500, fontSize: '0.95rem' }}>{i + 1}. {item.item_name}</div>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace' }}>
+                      ₹{Number(item.item_price).toFixed(2)} × {item.quantity}
+                    </div>
+                  </div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '1rem' }}>
+                    ₹{(item.item_price * item.quantity).toFixed(2)}
+                  </div>
                 </div>
-              </div>
-              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '0.9rem' }}>
-                ₹{(item.item_price * item.quantity).toFixed(2)}
-              </div>
-            </div>
-          ))}
+              ))}
           <div style={{ paddingTop: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: 4 }}>
               <span>Subtotal</span><span className="font-mono">₹{subtotal.toFixed(2)}</span>
@@ -325,10 +339,13 @@ function BillDetailModal({ bill: initialBill, onClose, onRefresh, isOwner }) {
               )}
             </div>
           )}
+          {/* ── Print row ── */}
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-secondary btn-full btn-sm" onClick={onClose}>Close</button>
-            <button className="btn btn-dark btn-full btn-sm" onClick={() => !loading && printBill(bill, items)} disabled={loading}>
-              🖨️ Print Bill
+            <button className="btn btn-dark btn-full btn-sm"
+              title="Bluetooth thermal printer — requires 'Bluetooth Print' app on Android"
+              onClick={() => bluetoothPrint(bill)}>
+              📱 BT Print
             </button>
           </div>
         </div>
@@ -442,16 +459,17 @@ export default function DashboardPage() {
               )}
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '0.95rem' }}>₹{Number(bill.total_amount).toFixed(2)}</div>
+              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '0.85rem' }}>₹{Number(bill.total_amount).toFixed(2)}</div>
               {Number(bill.discount_percent) > 0 && <div style={{ fontSize: '0.68rem', color: 'var(--danger)' }}>-{bill.discount_percent}% off</div>}
             </div>
             <div style={{ flexShrink: 0 }}>
               <span className={`badge badge-${bill.status}`}>{bill.status === 'paid' ? '✓' : '⏳'}</span>
             </div>
             <div style={{ display: 'flex', gap: 5, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+              {/* Bluetooth thermal printer — Android only */}
               <button className="btn btn-sm btn-dark" style={{ padding: '5px 9px', minHeight: 32 }}
-                title="Print bill" onClick={e => handleQuickPrint(e, bill)} disabled={printingId === bill.id}>
-                {printingId === bill.id ? '⏳' : '🖨️'}
+                title="Bluetooth Print (Android thermal printer app)" onClick={e => { e.stopPropagation(); bluetoothPrint(bill) }}>
+                📱
               </button>
               {bill.status === 'pending' && (owner ? (
                 <button className="btn btn-sm" style={{ padding: '5px 9px', minHeight: 32, background: 'var(--success)', color: 'var(--white)' }}
