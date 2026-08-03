@@ -115,7 +115,7 @@ export default async function handler(req, res) {
     const name  = pad(item.item_name, 15)
     const qty   = pad(item.quantity,  3, true)
     const amtS  = pad(amt.toFixed(2), 7, true)
-    rows.push(text(`${num} ${name} ${qty} ${amtS}`, { format: 4 }))
+    rows.push(text(`${num} ${name} ${qty} ${amtS}`, { format: 3.3 }))
   })
 
   rows.push(text(SOLID))
@@ -130,7 +130,7 @@ export default async function handler(req, res) {
     rows.push(text(`Discount (${discPct}%) : -Rs. ${discAmt.toFixed(2)}`, { align: 2 }))
   }
   rows.push(text(SOLID))
-  rows.push(text(`TOTAL : Rs. ${total.toFixed(2)}`, { bold: 1, align: 1, format: 4 }))
+  rows.push(text(`TOTAL : Rs. ${total.toFixed(2)}`, { bold: 1, align: 1, format: 3.5 }))
   rows.push(text(SOLID))
 
   if (bill.status === 'paid') {
