@@ -119,6 +119,76 @@ function printBillHTML(bill, items) {
   setTimeout(() => URL.revokeObjectURL(url), 30000)
 }
 
+// ── Bluetooth thermal print (Simple Bluetooth Printer app) ───────
+// Fires btprinter:// deep link → Simple Bluetooth Printer on Android
+function printBillBluetooth(bill, items) {
+  const dateStr  = new Date(bill.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+  const timeStr  = new Date(bill.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+  const subtotal = Number(bill.total_amount) + Number(bill.discount_amount || 0)
+  const discPct  = Number(bill.discount_percent || 0)
+  const discAmt  = Number(bill.discount_amount  || 0)
+  const total    = Number(bill.total_amount)
+
+  const W    = 32   // 58mm printer column width
+  const line = '-'.repeat(W)
+  const dline= '='.repeat(W)
+
+  // Right-align a value within a fixed total width
+  const rAlign = (label, value, width = W) => {
+    const gap = width - label.length - value.length
+    return label + ' '.repeat(Math.max(1, gap)) + value
+  }
+
+  // Item rows: name truncated to 18 chars, qty, amount right-aligned
+  const itemLines = items.map((item, i) => {
+    const num   = `${i + 1}.`
+    const name  = item.item_name.length > 16 ? item.item_name.slice(0, 14) + '..' : item.item_name
+    const left  = `${num} ${name} x${item.quantity}`
+    const right = `Rs.${(item.item_price * item.quantity).toFixed(2)}`
+    const gap   = W - left.length - right.length
+    return left + ' '.repeat(Math.max(1, gap)) + right
+  }).join('\n')
+
+  const discLine = discPct > 0
+    ? '\n' + rAlign(`Discount (${discPct}%)`, `- Rs.${discAmt.toFixed(2)}`)
+    : ''
+
+  const paidLine = bill.status === 'paid' ? '\n** PAID **' : ''
+
+  const receipt = [
+    '     ' + SHOP.name,
+    '  ' + SHOP.sub,
+    SHOP.address,
+    SHOP.address2,
+    dline,
+    rAlign('Bill: ' + billNo(bill.id), dateStr),
+    'Customer: ' + bill.customer_name,
+    bill.created_by ? 'Staff: ' + bill.created_by.split('@')[0] : null,
+    line,
+    'ITEM             QTY      AMT',
+    line,
+    itemLines,
+    line,
+    rAlign('Subtotal', 'Rs.' + subtotal.toFixed(2)),
+    discLine,
+    dline,
+    rAlign('TOTAL', 'Rs.' + total.toFixed(2)),
+    dline,
+    paidLine,
+    '',
+    '  Thank you for shopping with us!',
+    '     ' + SHOP.tagline,
+    '',
+    '  ' + timeStr,
+    '',
+  ].filter(l => l !== null).join('\n')
+
+  const params = new URLSearchParams()
+  params.append('content', receipt)
+  params.append('encode_format', 'UTF-8')
+  window.location.href = `btprinter://print?${params.toString()}`
+}
+
 // ── Discount modal ────────────────────────────────────────────────
 function DiscountModal({ bill, onClose, onSaved }) {
   const toast = useToast()
@@ -298,9 +368,25 @@ function BillDetailModal({ bill: initialBill, onClose, onRefresh, isOwner }) {
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-secondary btn-full btn-sm" onClick={onClose}>Close</button>
             <button className="btn btn-dark btn-full btn-sm" onClick={handlePrint} disabled={loading}>
-              🖨️ Print Bill
+              🌐 Browser Print
             </button>
           </div>
+          <button
+            className="btn btn-full btn-sm"
+            style={{
+              marginTop: 8,
+              background: '#1a3a2a',
+              color: '#4ade80',
+              border: '1.5px solid #166534',
+              fontWeight: 700,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.5 : 1,
+            }}
+            disabled={loading}
+            onClick={() => printBillBluetooth(bill, items)}
+          >
+            🖨️ Print via Bluetooth Printer
+          </button>
         </div>
       </div>
       {showDiscount && <DiscountModal bill={bill} onClose={() => setShowDiscount(false)} onSaved={reloadBill} />}
@@ -341,7 +427,7 @@ export default function DashboardPage() {
     setPrintingId(bill.id)
     try {
       const { data: items } = await supabase.from('bill_items').select('*').eq('bill_id', bill.id)
-      printBillHTML(bill, items || [])
+      printBillBluetooth(bill, items || [])
     } catch { toast('Failed to print', 'error') }
     setPrintingId(null)
   }
