@@ -38,17 +38,22 @@ function barcodeToDataURL(code) {
 }
 
 // ── Generate PDF with barcode labels ─────────────────────────────
+// Sticker: 30mm wide × 25mm tall — maximises count on A4
+// Layout: 6 cols × 10 rows = 60 stickers/page (3mm margin, 0mm gap — flush)
 async function generateLabelPDF(items, copies) {
   const { jsPDF } = await import('jspdf')
 
-  // Label: 50×25mm, 4 cols on A4
-  const LW = 50, LH = 25
-  const MX = 8,  MY = 8
-  const GX = 4,  GY = 3
+  // Sticker dimensions (mm)
+  const LW = 30, LH = 25
+  // Page margins — tiny so stickers pack edge-to-edge
+  const MX = 0, MY = 0
+  // Zero gap between stickers (cut line only, no spacing)
+  const GX = 0, GY = 0
   const PW = 210, PH = 297
-  const cols    = Math.floor((PW - MX * 2 + GX) / (LW + GX))  // 3
-  const rows    = Math.floor((PH - MY * 2 + GY) / (LH + GY))  // 9
-  const perPage = cols * rows
+
+  const cols    = Math.floor((PW - MX * 2 + GX) / (LW + GX))  // 7
+  const rows    = Math.floor((PH - MY * 2 + GY) / (LH + GY))  // 11
+  const perPage = cols * rows                                    // 77
 
   const labels = []
   for (const item of items) for (let i = 0; i < copies; i++) labels.push(item)
@@ -65,111 +70,58 @@ async function generateLabelPDF(items, copies) {
     const x   = MX + col * (LW + GX)
     const y   = MY + row * (LH + GY)
 
-    // Border
-    doc.setDrawColor(200, 200, 200)
-    doc.setLineWidth(0.3)
-    doc.roundedRect(x, y, LW, LH, 1, 1)
+    // Thin cut border
+    doc.setDrawColor(180, 180, 180)
+    doc.setLineWidth(0.15)
+    doc.rect(x, y, LW, LH)
 
     // Shop name
+    doc.setFontSize(4)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(90, 90, 90)
+    const shopShort = 'MAYUR MASALA CENTER'
+    doc.text(shopShort, x + LW / 2, y + 2.5, { align: 'center' })
+
+    // Item name — truncate to fit 30mm width
     doc.setFontSize(5.5)
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(80, 80, 80)
-    doc.text(SHOP_NAME.toUpperCase(), x + LW / 2, y + 3.5, { align: 'center' })
-
-    // Item name
-    doc.setFontSize(7)
-    doc.setFont('helvetica', 'bold')
     doc.setTextColor(0, 0, 0)
-    const maxChars = 22
+    const maxChars = 18
     const name = item.name.length > maxChars ? item.name.slice(0, maxChars - 1) + '…' : item.name
-    doc.text(name, x + LW / 2, y + 7, { align: 'center' })
+    doc.text(name, x + LW / 2, y + 6, { align: 'center' })
 
     // Barcode image
     try {
       const bc = await barcodeToDataURL(item.barcode)
-      doc.addImage(bc, 'PNG', x + 3, y + 8.5, LW - 6, 10)
+      // Tight barcode: nearly full width, leaving 1mm each side
+      doc.addImage(bc, 'PNG', x + 1, y + 7, LW - 2, 11)
     } catch (e) {
-      doc.setFontSize(6)
+      doc.setFontSize(5)
       doc.setTextColor(150)
       doc.text(item.barcode, x + LW / 2, y + 13, { align: 'center' })
     }
 
-    // Price (left) + Code (right)
-    doc.setFontSize(7)
+    // Price — bottom left, prominent
+    doc.setFontSize(6.5)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(0, 120, 90)
-    doc.text(`Rs.${Number(item.price).toFixed(2)}`, x + 3, y + 22)
+    doc.text(`Rs.${Number(item.price).toFixed(2)}`, x + 1.5, y + 22.5)
 
-    doc.setFontSize(5.5)
+    // Barcode digits — bottom right, tiny
+    doc.setFontSize(4)
     doc.setFont('helvetica', 'normal')
-    doc.setTextColor(120, 120, 120)
-    doc.text(item.barcode, x + LW - 3, y + 22, { align: 'right' })
+    doc.setTextColor(140, 140, 140)
+    doc.text(item.barcode, x + LW - 1.5, y + 22.5, { align: 'right' })
   }
 
   return doc
 }
 
-// ── Generate DOCX with barcode labels (HTML-based) ───────────────
-// Uses docx-style HTML that Word/LibreOffice opens natively
-async function generateLabelDOCX(items, copies) {
-  const labels = []
-  for (const item of items) for (let i = 0; i < copies; i++) labels.push(item)
-
-  // Build each label as a table cell with barcode as base64 img
-  const labelCells = await Promise.all(labels.map(async (item) => {
-    let bcImg = ''
-    try {
-      const dataUrl = await barcodeToDataURL(item.barcode)
-      bcImg = `<img src="${dataUrl}" width="160" height="50" style="display:block;margin:0 auto;"/>`
-    } catch (e) {
-      bcImg = `<p style="font-family:Courier;font-size:7pt;text-align:center;">${item.barcode}</p>`
-    }
-
-    return `
-      <td style="width:5cm;height:2.5cm;border:0.5pt solid #ccc;padding:2pt;vertical-align:top;text-align:center;">
-        <p style="font-size:6pt;font-weight:bold;color:#555;margin:0;">${SHOP_NAME.toUpperCase()}</p>
-        <p style="font-size:8pt;font-weight:bold;margin:1pt 0;">${item.name.length > 22 ? item.name.slice(0, 21) + '…' : item.name}</p>
-        ${bcImg}
-        <p style="font-size:8pt;font-weight:bold;color:#007a60;margin:1pt 0;">Rs.${Number(item.price).toFixed(2)}</p>
-      </td>`
-  }))
-
-  // Pack into rows of 3
-  const cols = 3
-  const rowsHtml = []
-  for (let i = 0; i < labelCells.length; i += cols) {
-    const chunk = labelCells.slice(i, i + cols)
-    while (chunk.length < cols) chunk.push('<td style="width:5cm;height:2.5cm;"></td>')
-    rowsHtml.push(`<tr>${chunk.join('')}</tr>`)
-  }
-
-  const html = `
-<html xmlns:o="urn:schemas-microsoft-com:office:office"
-      xmlns:w="urn:schemas-microsoft-com:office:word"
-      xmlns="http://www.w3.org/TR/REC-html40">
-<head>
-<meta charset="UTF-8">
-<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View></w:WordDocument></xml><![endif]-->
-<style>
-  @page { margin: 1cm; size: A4; }
-  body  { font-family: Arial, sans-serif; }
-  table { border-collapse: collapse; width: 100%; }
-</style>
-</head>
-<body>
-<table>${rowsHtml.join('')}</table>
-</body></html>`
-
-  const blob = new Blob([html], { type: 'application/msword' })
-  return blob
-}
-
 // ── Print modal (per-item OR all items) ──────────────────────────
 function PrintModal({ items, title, onClose }) {
   const toast = useToast()
-  const [copies, setCopies]       = useState(1)
-  const [genPDF, setGenPDF]       = useState(false)
-  const [genDOCX, setGenDOCX]     = useState(false)
+  const [copies, setCopies]   = useState(1)
+  const [genPDF, setGenPDF]   = useState(false)
 
   const total = items.length * copies
 
@@ -184,37 +136,18 @@ function PrintModal({ items, title, onClose }) {
       doc.save(fname)
       toast(`PDF downloaded — ${total} label${total > 1 ? 's' : ''}`)
       onClose()
-    } catch (e) { toast('PDF generation failed', 'error') }
+    } catch (e) { toast('PDF generation failed: ' + e.message, 'error') }
     setGenPDF(false)
   }
 
-  const handleDOCX = async () => {
-    if (copies < 1) return toast('Enter at least 1 copy', 'error')
-    setGenDOCX(true)
-    try {
-      const blob  = await generateLabelDOCX(items, copies)
-      const fname = items.length === 1
-        ? `label-${items[0].name.replace(/\s+/g, '-').toLowerCase()}-x${copies}.doc`
-        : `mayur-masala-labels-x${copies}.doc`
-      const a = document.createElement('a')
-      a.href  = URL.createObjectURL(blob)
-      a.download = fname
-      a.click()
-      URL.revokeObjectURL(a.href)
-      toast(`Word document downloaded — ${total} label${total > 1 ? 's' : ''}`)
-      onClose()
-    } catch (e) { toast('DOCX generation failed', 'error') }
-    setGenDOCX(false)
-  }
-
-  const busy = genPDF || genDOCX
+  const busy = genPDF
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal">
         <div className="modal-title">🖨️ {title}</div>
         <div className="modal-subtitle">
-          {items.length === 1 ? items[0].name : `${items.length} items`} — 50×25mm labels
+          {items.length === 1 ? items[0].name : `${items.length} items`} — 30×25mm stickers · A4
         </div>
 
         {/* Item chips */}
@@ -256,16 +189,13 @@ function PrintModal({ items, title, onClose }) {
         {/* Actions */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button className="btn btn-primary btn-full btn-lg" onClick={handlePDF} disabled={busy}>
-            {genPDF ? '⏳ Generating PDF…' : '⬇️ Download PDF'}
-          </button>
-          <button className="btn btn-dark btn-full" onClick={handleDOCX} disabled={busy}>
-            {genDOCX ? '⏳ Generating Doc…' : '📄 Download as Word (.doc)'}
+            {genPDF ? '⏳ Generating PDF…' : '⬇️ Download PDF for Print'}
           </button>
           <button className="btn btn-ghost btn-full" onClick={onClose} disabled={busy}>Cancel</button>
         </div>
 
         <div style={{ textAlign: 'center', fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 10 }}>
-          A4 · 3 cols · 50×25mm per label · CODE128
+          A4 · 7 cols × 11 rows · 30×25mm per sticker · CODE128
         </div>
       </div>
     </div>
@@ -354,7 +284,7 @@ export default function ItemsPage() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <div>
           <h1 className="page-title">Items & Barcodes</h1>
-          <p className="page-subtitle">PDF & Word label download · 50×25mm</p>
+          <p className="page-subtitle">PDF sticker sheet · 30×25mm · 77 per A4</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           <button className="btn btn-secondary"

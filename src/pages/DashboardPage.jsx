@@ -11,7 +11,7 @@ const SHOP = {
   sub:     'and Pooja Bhandar',
   address: 'Shagun Chowk, Pimpri Area, Shastri Nagar',
   address2:'Pimpri-Chinchwad, Maharashtra 411017',
-  phone:   '',
+  phone:   '+919359117213',
   tagline: 'Quality Masala & Pooja Items',
 }
 
