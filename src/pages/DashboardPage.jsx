@@ -119,22 +119,29 @@ function printBillHTML(bill, items) {
   setTimeout(() => URL.revokeObjectURL(url), 30000)
 }
 
-// ── Bluetooth thermal print (Simple Bluetooth Printer app) ───────
-// Fires btprinter:// deep link → Simple Bluetooth Printer on Android
-//
-// Two known reasons for "connects → completes → nothing prints":
-//  1. Non-ASCII chars (rupee ₹, emojis) silently corrupt the job
-//  2. No paper-feed lines at the end — content is stuck behind the head
-// Fixes: strip to ASCII only + append 6 blank lines to advance paper.
+// ── Bluetooth print helpers ───────────────────────────────────────
+const MAC_KEY = 'bt_printer_mac'
 
+function getMac()       { return localStorage.getItem(MAC_KEY) || '' }
+function saveMac(mac)   { localStorage.setItem(MAC_KEY, mac.trim()) }
+
+// Strip non-ASCII — thermal printers speak plain ASCII only.
+// Non-ASCII (₹, Hindi/Marathi, emojis) corrupts the job silently.
 function toAscii(str) {
-  // Replace common non-ASCII with safe equivalents, strip the rest
-  return String(str)
-    .replace(/₹/g, 'Rs.')
-    .replace(/[^\x00-\x7F]/g, '')
+  return String(str).replace(/₹/g, 'Rs.').replace(/[^\x20-\x7E\n\r]/g, '')
 }
 
-function printBillBluetooth(bill, items) {
+// KEY BUG FIX: URLSearchParams encodes spaces as "+" not "%20".
+// Many Android apps don't decode "+" back to spaces, so the printer
+// receives garbage and drops it. Use encodeURIComponent directly.
+function firePrint(content) {
+  const mac = getMac()
+  let url = `btprinter://print?content=${encodeURIComponent(content)}&encode_format=UTF-8`
+  if (mac) url += `&device_address=${encodeURIComponent(mac)}`
+  window.location.href = url
+}
+
+function buildReceipt(bill, items) {
   const dateStr  = new Date(bill.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
   const timeStr  = new Date(bill.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
   const subtotal = Number(bill.total_amount) + Number(bill.discount_amount || 0)
@@ -142,35 +149,23 @@ function printBillBluetooth(bill, items) {
   const discAmt  = Number(bill.discount_amount  || 0)
   const total    = Number(bill.total_amount)
 
-  const W    = 32   // 58mm printer column width
-  const line = '-'.repeat(W)
-  const dline= '='.repeat(W)
-
-  const rAlign = (label, value, width = W) => {
-    const gap = width - label.length - value.length
-    return label + ' '.repeat(Math.max(1, gap)) + value
-  }
+  const W     = 32
+  const line  = '-'.repeat(W)
+  const dline = '='.repeat(W)
+  const center = (s) => { const pad = Math.max(0, Math.floor((W - s.length) / 2)); return ' '.repeat(pad) + s }
+  const rAlign = (l, v) => { const gap = W - l.length - v.length; return l + ' '.repeat(Math.max(1, gap)) + v }
 
   const itemLines = items.map((item, i) => {
-    const num   = `${i + 1}.`
-    const name  = toAscii(item.item_name.length > 16 ? item.item_name.slice(0, 14) + '..' : item.item_name)
-    const left  = `${num} ${name} x${item.quantity}`
+    const name  = toAscii(item.item_name).slice(0, 16)
+    const left  = `${i + 1}. ${name} x${item.quantity}`
     const right = `Rs.${(item.item_price * item.quantity).toFixed(2)}`
-    const gap   = W - left.length - right.length
-    return left + ' '.repeat(Math.max(1, gap)) + right
+    return left + ' '.repeat(Math.max(1, W - left.length - right.length)) + right
   }).join('\n')
 
-  const discLine = discPct > 0
-    ? '\n' + rAlign(`Discount (${discPct}%)`, `- Rs.${discAmt.toFixed(2)}`)
-    : ''
-
-  const paidLine = bill.status === 'paid' ? '\n** PAID **' : ''
-
-  const receipt = [
-    '     ' + toAscii(SHOP.name),
-    '  '   + toAscii(SHOP.sub),
-    toAscii(SHOP.address),
-    toAscii(SHOP.address2),
+  const rows = [
+    center(toAscii(SHOP.name)),
+    center(toAscii(SHOP.sub)),
+    center(toAscii(SHOP.address)),
     dline,
     rAlign('Bill: ' + billNo(bill.id), dateStr),
     'Customer: ' + toAscii(bill.customer_name),
@@ -181,40 +176,89 @@ function printBillBluetooth(bill, items) {
     itemLines,
     line,
     rAlign('Subtotal', 'Rs.' + subtotal.toFixed(2)),
-    discLine,
+    discPct > 0 ? rAlign('Discount (' + discPct + '%)', '- Rs.' + discAmt.toFixed(2)) : null,
     dline,
     rAlign('TOTAL', 'Rs.' + total.toFixed(2)),
     dline,
-    paidLine,
+    bill.status === 'paid' ? center('** PAID **') : null,
     '',
-    '  Thank you for shopping!',
-    '  ' + toAscii(SHOP.tagline),
-    '  ' + timeStr,
-    // 6 blank lines = paper feed so content clears the print head
-    '\n\n\n\n\n\n',
-  ].filter(l => l !== null).join('\n')
+    center('Thank you for shopping!'),
+    center(timeStr),
+    // Paper feed — advances paper past the print head so receipt is visible
+    '\n\n\n\n\n',
+  ].filter(r => r !== null).join('\n')
 
-  const params = new URLSearchParams()
-  params.append('content', receipt)
-  params.append('encode_format', 'UTF-8')
-  window.location.href = `btprinter://print?${params.toString()}`
+  return rows
 }
 
-// Test print — tap to verify the printer connection is working
+function printBillBluetooth(bill, items) { firePrint(buildReceipt(bill, items)) }
+
 function testPrintBluetooth() {
-  const content = [
+  firePrint([
     '================================',
-    '         TEST PRINT             ',
+    '         TEST PRINT OK          ',
     '================================',
     '  Mayur Masala Center           ',
-    '  Printer connection OK!        ',
-    '',
-    '\n\n\n\n\n\n',
-  ].join('\n')
-  const params = new URLSearchParams()
-  params.append('content', content)
-  params.append('encode_format', 'UTF-8')
-  window.location.href = `btprinter://print?${params.toString()}`
+    '  Printer is working!           ',
+    '\n\n\n\n\n',
+  ].join('\n'))
+}
+
+// ── Printer setup modal ───────────────────────────────────────────
+function PrinterSetupModal({ onClose }) {
+  const [mac, setMac] = useState(getMac())
+  const toast = useToast()
+
+  const handleSave = () => {
+    const cleaned = mac.trim().toUpperCase()
+    // Basic MAC address format validation: XX:XX:XX:XX:XX:XX
+    if (cleaned && !/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(cleaned)) {
+      toast('Enter a valid MAC address like 00:11:22:33:44:55', 'error')
+      return
+    }
+    saveMac(cleaned)
+    toast(cleaned ? 'Printer MAC address saved!' : 'MAC address cleared')
+    onClose()
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <div className="modal-title">🖨️ Bluetooth Printer Setup</div>
+        <div className="modal-subtitle">
+          Set your printer MAC address so it connects automatically without asking every time.
+        </div>
+
+        <div style={{ background: 'var(--paper)', borderRadius: 'var(--radius-sm)', padding: '12px 14px', marginBottom: 16, fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+          <strong>How to find MAC address:</strong><br />
+          Android Settings → Bluetooth → tap your printer name → "Device info" or "Details"
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Printer MAC Address</label>
+          <input
+            className="form-input"
+            placeholder="00:11:22:33:44:55"
+            value={mac}
+            onChange={e => setMac(e.target.value)}
+            style={{ fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.05em' }}
+            autoFocus
+          />
+        </div>
+
+        {getMac() && (
+          <div style={{ fontSize: '0.78rem', color: 'var(--teal-dark)', marginBottom: 12 }}>
+            ✓ Saved: <strong style={{ fontFamily: 'JetBrains Mono, monospace' }}>{getMac()}</strong>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary btn-full" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary btn-full" onClick={handleSave}>Save &amp; Close</button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ── Discount modal ────────────────────────────────────────────────
@@ -429,11 +473,12 @@ export default function DashboardPage() {
   const { user } = useAuth()
   const owner    = isOwner(user?.email)
 
-  const [bills, setBills]         = useState([])
-  const [loading, setLoading]     = useState(true)
-  const [filter, setFilter]       = useState('all')
-  const [selectedBill, setSelectedBill] = useState(null)
-  const [printingId, setPrintingId] = useState(null)
+  const [bills, setBills]           = useState([])
+  const [loading, setLoading]       = useState(true)
+  const [filter, setFilter]         = useState('all')
+  const [selectedBill, setSelectedBill]     = useState(null)
+  const [printingId, setPrintingId]         = useState(null)
+  const [showPrinterSetup, setShowPrinterSetup] = useState(false)
 
   const fetchBills = useCallback(async () => {
     const { data, error } = await supabase.from('bills').select('*').order('created_at', { ascending: false })
@@ -483,9 +528,13 @@ export default function DashboardPage() {
             {owner && <span style={{ marginLeft: 8, background: 'var(--teal-glow)', color: 'var(--teal-dark)', fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: 99, border: '1px solid var(--teal)' }}>👑 Owner</span>}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-secondary btn-sm" onClick={testPrintBluetooth} title="Send a test page to verify printer is working">
-            🖨️ Test Print
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowPrinterSetup(true)}
+            title={getMac() ? `Printer: ${getMac()}` : 'Set up printer MAC address'}>
+            {getMac() ? '🖨️ Printer ✓' : '🖨️ Setup Printer'}
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={testPrintBluetooth}>
+            Test Print
           </button>
           <button className="btn btn-primary" onClick={() => navigate('/scan')}>+ New Bill</button>
         </div>
@@ -556,6 +605,9 @@ export default function DashboardPage() {
 
       {selectedBill && (
         <BillDetailModal bill={selectedBill} onClose={() => setSelectedBill(null)} onRefresh={fetchBills} isOwner={owner} />
+      )}
+      {showPrinterSetup && (
+        <PrinterSetupModal onClose={() => setShowPrinterSetup(false)} />
       )}
     </div>
   )
