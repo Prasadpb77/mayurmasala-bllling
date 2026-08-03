@@ -481,7 +481,7 @@ export default function ScanPage() {
   // ─── Step: Overview ────────────────────────────────
   if (step === 'overview') {
     return (
-      <div style={{ minHeight: '100vh', minHeight: '100dvh', background: 'var(--paper)' }}>
+      <div style={{ minHeight: '100dvh', background: 'var(--paper)' }}>
 
         {/* Dark header */}
         <div style={{

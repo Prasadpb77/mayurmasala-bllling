@@ -17,9 +17,9 @@ const SHOP = {
 
 function billNo(id) { return 'MM-' + id.slice(-6).toUpperCase() }
 
-// ── Browser print via popup window ───────────────────────────────
-// Opens bill HTML in a tiny popup, prints it, closes it.
-// More reliable than iframe — fully isolated from the dashboard page.
+// ── Browser print via blob URL ────────────────────────────────────
+// Creates bill as a blob URL, opens it in a new tab, auto-prints.
+// Avoids popup blockers and blank screen issues on Android Chrome.
 function printBillHTML(bill, items) {
   const dateStr  = new Date(bill.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
   const subtotal = Number(bill.total_amount) + Number(bill.discount_amount || 0)
@@ -39,7 +39,7 @@ function printBillHTML(bill, items) {
   const discRow = discPct > 0 ? `
     <tr class="disc">
       <td colspan="4" class="r">Discount (${discPct}%)</td>
-      <td class="r">-${discAmt.toFixed(2)}</td>
+      <td class="r">- ${discAmt.toFixed(2)}</td>
     </tr>` : ''
 
   const paidStamp = bill.status === 'paid' ? `<div class="paid">** PAID **</div>` : ''
@@ -74,6 +74,9 @@ function printBillHTML(bill, items) {
   .paid { text-align: center; font-size: 14px; font-weight: bold; color: #007a60; letter-spacing: 1px; margin: 5px 0 2px; }
   .ftr  { text-align: center; font-size: 8px; color: #666; margin-top: 7px; line-height: 1.6; }
   .cut  { text-align: center; font-size: 7px; color: #bbb; margin-top: 7px; letter-spacing: 3px; }
+  @media print {
+    body { width: 54mm; }
+  }
 </style></head><body>
   <div class="hdr">
     <div class="s1">${SHOP.name}</div>
@@ -102,36 +105,18 @@ function printBillHTML(bill, items) {
   ${paidStamp}
   <div class="ftr">Thank you for shopping with us!<br><small>${SHOP.tagline}</small></div>
   <div class="cut">- - - - - - - - - -</div>
-  <script>
-    window.onload = function() {
-      window.print();
-      setTimeout(function() { window.close(); }, 1000);
-    };
-  </script>
 </body></html>`
 
-  // Open popup window — fully isolated, only contains bill HTML
-  const popup = window.open('', '_blank', 'width=300,height=600,scrollbars=no,toolbar=no,menubar=no,location=no')
-  if (!popup) {
-    // Popup blocked — fallback to iframe
-    const iframe = document.createElement('iframe')
-    iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;'
-    document.body.appendChild(iframe)
-    iframe.contentDocument.open()
-    iframe.contentDocument.write(html)
-    iframe.contentDocument.close()
-    iframe.onload = () => {
-      setTimeout(() => {
-        iframe.contentWindow.focus()
-        iframe.contentWindow.print()
-        setTimeout(() => document.body.removeChild(iframe), 2000)
-      }, 300)
-    }
-    return
-  }
-  popup.document.open()
-  popup.document.write(html)
-  popup.document.close()
+  // Create a blob URL — opens as a real page in new tab, no popup blocker
+  const blob = new Blob([html], { type: 'text/html' })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href     = url
+  a.target   = '_blank'
+  a.rel      = 'noopener'
+  a.click()
+  // Clean up blob URL after a delay
+  setTimeout(() => URL.revokeObjectURL(url), 30000)
 }
 
 // ── Discount modal ────────────────────────────────────────────────
