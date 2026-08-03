@@ -130,7 +130,7 @@ export default async function handler(req, res) {
     rows.push(text(`Discount (${discPct}%) : -Rs. ${discAmt.toFixed(2)}`, { align: 2 }))
   }
   rows.push(text(SOLID))
-  rows.push(text(`TOTAL : Rs. ${total.toFixed(2)}`, { bold: 1, align: 1, format: 3 }))
+  rows.push(text(`TOTAL : Rs. ${total.toFixed(2)}`, { bold: 1, align: 1, format: 4 }))
   rows.push(text(SOLID))
 
   if (bill.status === 'paid') {
