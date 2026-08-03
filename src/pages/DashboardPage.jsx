@@ -121,6 +121,19 @@ function printBillHTML(bill, items) {
 
 // ── Bluetooth thermal print (Simple Bluetooth Printer app) ───────
 // Fires btprinter:// deep link → Simple Bluetooth Printer on Android
+//
+// Two known reasons for "connects → completes → nothing prints":
+//  1. Non-ASCII chars (rupee ₹, emojis) silently corrupt the job
+//  2. No paper-feed lines at the end — content is stuck behind the head
+// Fixes: strip to ASCII only + append 6 blank lines to advance paper.
+
+function toAscii(str) {
+  // Replace common non-ASCII with safe equivalents, strip the rest
+  return String(str)
+    .replace(/₹/g, 'Rs.')
+    .replace(/[^\x00-\x7F]/g, '')
+}
+
 function printBillBluetooth(bill, items) {
   const dateStr  = new Date(bill.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
   const timeStr  = new Date(bill.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
@@ -133,16 +146,14 @@ function printBillBluetooth(bill, items) {
   const line = '-'.repeat(W)
   const dline= '='.repeat(W)
 
-  // Right-align a value within a fixed total width
   const rAlign = (label, value, width = W) => {
     const gap = width - label.length - value.length
     return label + ' '.repeat(Math.max(1, gap)) + value
   }
 
-  // Item rows: name truncated to 18 chars, qty, amount right-aligned
   const itemLines = items.map((item, i) => {
     const num   = `${i + 1}.`
-    const name  = item.item_name.length > 16 ? item.item_name.slice(0, 14) + '..' : item.item_name
+    const name  = toAscii(item.item_name.length > 16 ? item.item_name.slice(0, 14) + '..' : item.item_name)
     const left  = `${num} ${name} x${item.quantity}`
     const right = `Rs.${(item.item_price * item.quantity).toFixed(2)}`
     const gap   = W - left.length - right.length
@@ -156,14 +167,14 @@ function printBillBluetooth(bill, items) {
   const paidLine = bill.status === 'paid' ? '\n** PAID **' : ''
 
   const receipt = [
-    '     ' + SHOP.name,
-    '  ' + SHOP.sub,
-    SHOP.address,
-    SHOP.address2,
+    '     ' + toAscii(SHOP.name),
+    '  '   + toAscii(SHOP.sub),
+    toAscii(SHOP.address),
+    toAscii(SHOP.address2),
     dline,
     rAlign('Bill: ' + billNo(bill.id), dateStr),
-    'Customer: ' + bill.customer_name,
-    bill.created_by ? 'Staff: ' + bill.created_by.split('@')[0] : null,
+    'Customer: ' + toAscii(bill.customer_name),
+    bill.created_by ? 'Staff: ' + toAscii(bill.created_by.split('@')[0]) : null,
     line,
     'ITEM             QTY      AMT',
     line,
@@ -176,15 +187,32 @@ function printBillBluetooth(bill, items) {
     dline,
     paidLine,
     '',
-    '  Thank you for shopping with us!',
-    '     ' + SHOP.tagline,
-    '',
+    '  Thank you for shopping!',
+    '  ' + toAscii(SHOP.tagline),
     '  ' + timeStr,
-    '',
+    // 6 blank lines = paper feed so content clears the print head
+    '\n\n\n\n\n\n',
   ].filter(l => l !== null).join('\n')
 
   const params = new URLSearchParams()
   params.append('content', receipt)
+  params.append('encode_format', 'UTF-8')
+  window.location.href = `btprinter://print?${params.toString()}`
+}
+
+// Test print — tap to verify the printer connection is working
+function testPrintBluetooth() {
+  const content = [
+    '================================',
+    '         TEST PRINT             ',
+    '================================',
+    '  Mayur Masala Center           ',
+    '  Printer connection OK!        ',
+    '',
+    '\n\n\n\n\n\n',
+  ].join('\n')
+  const params = new URLSearchParams()
+  params.append('content', content)
   params.append('encode_format', 'UTF-8')
   window.location.href = `btprinter://print?${params.toString()}`
 }
@@ -455,7 +483,12 @@ export default function DashboardPage() {
             {owner && <span style={{ marginLeft: 8, background: 'var(--teal-glow)', color: 'var(--teal-dark)', fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: 99, border: '1px solid var(--teal)' }}>👑 Owner</span>}
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => navigate('/scan')}>+ New Bill</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary btn-sm" onClick={testPrintBluetooth} title="Send a test page to verify printer is working">
+            🖨️ Test Print
+          </button>
+          <button className="btn btn-primary" onClick={() => navigate('/scan')}>+ New Bill</button>
+        </div>
       </div>
 
       <div className="stats-row">
