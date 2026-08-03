@@ -115,7 +115,7 @@ export default async function handler(req, res) {
     const name  = pad(item.item_name, 15)
     const qty   = pad(item.quantity,  3, true)
     const amtS  = pad(amt.toFixed(2), 7, true)
-    rows.push(text(`${num} ${name} ${qty} ${amtS}`, { format: 3 }))
+    rows.push(text(`${num} ${name} ${qty} ${amtS}`, { format: 4 }))
   })
 
   rows.push(text(SOLID))
