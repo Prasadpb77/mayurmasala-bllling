@@ -38,30 +38,42 @@ function barcodeToDataURL(code) {
   })
 }
 
-// ── Generate PDF: 40mm × 30mm labels, 5 cols × 9 rows = 45/page ──
-// 2mm col gap + 0.5mm row gap for clean cutting
-// Bar width:3 (~0.58mm) — comfortable scan
-// Digit font 8.5 — saves space, gives taller bars
-async function generateLabelPDF(items, copies) {
+// ── Paper size definitions ────────────────────────────────────────
+const PAPER_SIZES = {
+  'A2': { w: 420, h: 594, jspdf: 'a2' },
+  'A3': { w: 297, h: 420, jspdf: 'a3' },
+  'A4': { w: 210, h: 297, jspdf: 'a4' },
+  'A5': { w: 148, h: 210, jspdf: 'a5' },
+}
+
+// Label: 40mm wide × 30mm tall
+// Internal layout (all measurements from label top-left corner):
+//   y+1  to y+12  → Logo (10mm) + Item name + Price  (11mm zone)
+//   y+12 to y+25  → Barcode bars                     (13mm zone)
+//   y+25 to y+29  → Barcode digits                   (4mm zone)
+//   y+29 to y+30  → Bottom padding before cut line    (1mm)
+// Gap between labels: GX=2mm (cols), GY=1.5mm (rows) — easy cutting
+async function generateLabelPDF(items, copies, paperKey = 'A4') {
   const { jsPDF } = await import('jspdf')
 
+  const paper  = PAPER_SIZES[paperKey]
   const LW = 40, LH = 30
-  const GX = 2,  GY = 0.5   // cutting gaps
+  const GX = 2,  GY = 1.5   // gaps for easy cutting
 
-  // 5×(40) + 4×(2) = 208mm ✓  9×(30) + 8×(0.5) = 274mm ✓
-  const cols    = 5
-  const rows    = 9
-  const perPage = cols * rows  // 45
+  const cols    = Math.floor((paper.w + GX) / (LW + GX))
+  const rows    = Math.floor((paper.h + GY) / (LH + GY))
+  const perPage = cols * rows
 
   const labels = []
   for (const item of items) for (let i = 0; i < copies; i++) labels.push(item)
 
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  const doc = new jsPDF({ unit: 'mm', format: paper.jspdf })
 
-  const logoImg = await new Promise((resolve) => {
+  // Pre-load logo once
+  await new Promise((resolve) => {
     const img = new Image()
-    img.onload = () => resolve(img)
-    img.onerror = () => resolve(null)
+    img.onload = resolve
+    img.onerror = resolve
     img.src = LOGO_B64
   })
 
@@ -72,54 +84,51 @@ async function generateLabelPDF(items, copies) {
 
     const col = pagePos % cols
     const row = Math.floor(pagePos / cols)
-    const x   = col * (LW + GX)   // 0, 42, 84, 126, 168
-    const y   = row * (LH + GY)   // 0, 30.5, 61, ...
+    const x   = col * (LW + GX)
+    const y   = row * (LH + GY)
 
-    // ── Cut border (dashed light grey) ──
-    doc.setDrawColor(200, 200, 200)
+    // ── Cut border ──
+    doc.setDrawColor(210, 210, 210)
     doc.setLineWidth(0.15)
     doc.rect(x, y, LW, LH)
 
-    // ── LOGO — top-left, 10×10mm ──
-    if (logoImg) {
-      doc.addImage(LOGO_B64, 'PNG', x + 1, y + 1, 10, 10)
-    }
+    // ── LOGO — top-left, 10×10mm, 1mm padding ──
+    doc.addImage(LOGO_B64, 'PNG', x + 1, y + 1, 10, 10)
 
-    // ── ITEM NAME — right of logo, bold black ──
+    // ── ITEM NAME — right of logo ──
+    const tx = x + 12.5
     doc.setFontSize(7)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(0, 0, 0)
-    const tx = x + 12.5
     const maxChars = 14
     const name = item.name.length > maxChars ? item.name.slice(0, maxChars - 1) + '…' : item.name
-    doc.text(name, tx, y + 5)
+    doc.text(name, tx, y + 5.5)
 
-    // ── DISPLAY PRICE — right of logo, bold green ──
-    doc.setFontSize(9)
+    // ── DISPLAY PRICE — right of logo, green ──
+    doc.setFontSize(9.5)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(0, 130, 60)
     const displayPrice = item.display_price ?? item.price * 2
-    doc.text(`Rs.${Number(displayPrice).toFixed(2)}`, tx, y + 10.5)
+    doc.text(`Rs.${Number(displayPrice).toFixed(2)}`, tx, y + 11)
 
-    // ── BARCODE IMAGE — full width, taller now (13mm) ──
-    // More height = faster scanner lock-on
+    // ── BARCODE IMAGE — y+12 to y+25 = 13mm tall ──
     try {
       const bc = await barcodeToDataURL(item.barcode)
-      doc.addImage(bc, 'PNG', x + 0.5, y + 12.5, LW - 1, 13)
+      doc.addImage(bc, 'PNG', x + 0.5, y + 12, LW - 1, 13)
     } catch (e) {
-      doc.setFontSize(5)
-      doc.setTextColor(150)
-      doc.text(item.barcode, x + LW / 2, y + 19, { align: 'center' })
+      doc.setFontSize(5); doc.setTextColor(150)
+      doc.text(item.barcode, x + LW / 2, y + 18.5, { align: 'center' })
     }
 
-    // ── BARCODE DIGITS — font 8.5 bold, bottom ──
-    // Smaller than before but still readable; bars do the scanning work
+    // ── BARCODE DIGITS — y+27, font 8.5, centred ──
     doc.setFontSize(8.5)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(20, 20, 20)
-    doc.text(item.barcode, x + LW / 2, y + 28.5, { align: 'center' })
+    doc.text(item.barcode, x + LW / 2, y + 27, { align: 'center' })
   }
 
+  // ── Summary: labels per page per paper size ──
+  doc._labelMeta = { cols, rows, perPage }
   return doc
 }
 
