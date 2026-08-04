@@ -21,8 +21,8 @@ function billNo(id) { return 'MM-' + id.slice(-6).toUpperCase() }
 // calls window.print() automatically — Android then shows the native
 // print dialog where the paired Bluetooth printer appears directly.
 function printBill(bill, items) {
-  const dateStr  = new Date(bill.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-  const timeStr  = new Date(bill.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+  const dateStr  = new Date(bill.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })
+  const timeStr  = new Date(bill.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })
   const subtotal = Number(bill.total_amount) + Number(bill.discount_amount || 0)
   const discPct  = Number(bill.discount_percent || 0)
   const discAmt  = Number(bill.discount_amount  || 0)
@@ -316,9 +316,9 @@ function BillDetailModal({ bill: initialBill, onClose, onRefresh, isOwner }) {
         </div>
 
         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <div>Bill: {billNo(bill.id)} · {new Date(bill.created_at).toLocaleString()}</div>
+          <div>Bill: {billNo(bill.id)} · {new Date(bill.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</div>
           {bill.created_by && <div>Created by: <span style={{ color: 'var(--teal-dark)', fontWeight: 600 }}>{bill.created_by.split('@')[0]}</span></div>}
-          {bill.paid_at && <div>Paid: {new Date(bill.paid_at).toLocaleString()}</div>}
+          {bill.paid_at && <div>Paid: {new Date(bill.paid_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</div>}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -453,7 +453,7 @@ export default function DashboardPage() {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 700, fontSize: '0.925rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bill.customer_name}</div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                {billNo(bill.id)} · {new Date(bill.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} {new Date(bill.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {billNo(bill.id)} · {new Date(bill.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' })} {new Date(bill.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}
               </div>
               {bill.created_by && (
                 <div style={{ fontSize: '0.68rem', marginTop: 2, color: 'var(--teal-dark)', opacity: 0.85 }}>🧑 {bill.created_by.split('@')[0]}</div>
