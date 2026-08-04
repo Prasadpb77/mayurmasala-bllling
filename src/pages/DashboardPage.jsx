@@ -21,8 +21,8 @@ function billNo(id) { return 'MM-' + id.slice(-6).toUpperCase() }
 // calls window.print() automatically — Android then shows the native
 // print dialog where the paired Bluetooth printer appears directly.
 function printBill(bill, items) {
-  const dateStr  = new Date(bill.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })
-  const timeStr  = new Date(bill.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })
+  const dateStr  = new Date(bill.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+  const timeStr  = new Date(bill.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
   const subtotal = Number(bill.total_amount) + Number(bill.discount_amount || 0)
   const discPct  = Number(bill.discount_percent || 0)
   const discAmt  = Number(bill.discount_amount  || 0)
@@ -63,27 +63,28 @@ function printBill(bill, items) {
       background: #fff;
     }
     .hdr  { text-align: center; margin-bottom: 4px; }
-    .s1   { font-size: 20px; font-weight: bold; }
-    .s2   { font-size: 15px; font-weight: bold; }
-    .s3   { font-size: 12px; color: #333; }
-    hr.dl { border: none; border-top: 1.5px solid #000; margin: 3px 0; }
-    hr.dd { border: none; border-top: 1px dashed #888; margin: 3px 0; }
-    .meta { font-size: 12px; margin-bottom: 2px; }
+    .s1   { font-size: 22px; font-weight: bold; }
+    .s2   { font-size: 16px; font-weight: bold; }
+    .s3   { font-size: 13px; color: #333; }
+    hr.dl { border: none; border-top: 1.5px solid #000; margin: 4px 0; }
+    hr.dd { border: none; border-top: 1px dashed #888; margin: 4px 0; }
+    .meta { font-size: 15px; margin-bottom: 3px; line-height: 1.5; }
     .row  { display: flex; justify-content: space-between; }
     table { width: 100%; border-collapse: collapse; }
-    th  { font-size: 12px; font-weight: bold; padding: 2px 0; border-bottom: 1px dashed #888; text-align: left; }
-    td  { font-size: 13px; padding: 1px 0; vertical-align: top; }
-    td.c { text-align: center; width: 16px; }
+    th  { font-size: 15px; font-weight: bold; padding: 3px 0; border-bottom: 1px dashed #888; text-align: left; }
+    td  { font-size: 16px; padding: 2px 0; vertical-align: top; line-height: 1.4; }
+    td.c { text-align: center; width: 18px; }
     td.r { text-align: right; }
-    td:nth-child(1) { width: 12px; }
-    td:nth-child(4) { width: 30px; }
-    td:nth-child(5) { width: 32px; }
-    .sub td  { font-size: 13px; color: #333; padding-top: 3px; }
-    .disc td { color: #c00; font-size: 13px; }
-    .tot     { border-top: 1.5px solid #000; }
-    .tot td  { font-size: 18px; font-weight: bold; padding-top: 3px; }
-    .paid { text-align: center; font-size: 20px; font-weight: bold; color: #007a60; margin: 4px 0 2px; }
-    .ftr  { text-align: center; font-size: 12px; color: #555; margin-top: 6px; line-height: 1.5; }
+    td:nth-child(1) { width: 14px; font-size: 14px; color: #555; }
+    td:nth-child(4) { width: 34px; }
+    td:nth-child(5) { width: 36px; }
+    .sub td  { font-size: 15px; color: #333; padding-top: 4px; }
+    .disc td { color: #c00; font-size: 15px; }
+    .tot     { border-top: 2px solid #000; }
+    .tot td  { font-size: 22px; font-weight: bold; padding-top: 4px; }
+    .paid { text-align: center; font-size: 22px; font-weight: bold; color: #007a60; margin: 6px 0 3px; }
+    .ftr  { text-align: center; font-size: 16px; color: #333; margin-top: 8px; line-height: 1.6; font-weight: bold; }
+    .ftr small { font-size: 14px; font-weight: normal; color: #555; }
     @media print {
       body { width: auto !important; zoom: 1 !important; transform: none !important; }
     }
@@ -315,9 +316,9 @@ function BillDetailModal({ bill: initialBill, onClose, onRefresh, isOwner }) {
         </div>
 
         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <div>Bill: {billNo(bill.id)} · {new Date(bill.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</div>
+          <div>Bill: {billNo(bill.id)} · {new Date(bill.created_at).toLocaleString()}</div>
           {bill.created_by && <div>Created by: <span style={{ color: 'var(--teal-dark)', fontWeight: 600 }}>{bill.created_by.split('@')[0]}</span></div>}
-          {bill.paid_at && <div>Paid: {new Date(bill.paid_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</div>}
+          {bill.paid_at && <div>Paid: {new Date(bill.paid_at).toLocaleString()}</div>}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -452,7 +453,7 @@ export default function DashboardPage() {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 700, fontSize: '0.925rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bill.customer_name}</div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                {billNo(bill.id)} · {new Date(bill.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' })} {new Date(bill.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}
+                {billNo(bill.id)} · {new Date(bill.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} {new Date(bill.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </div>
               {bill.created_by && (
                 <div style={{ fontSize: '0.68rem', marginTop: 2, color: 'var(--teal-dark)', opacity: 0.85 }}>🧑 {bill.created_by.split('@')[0]}</div>
