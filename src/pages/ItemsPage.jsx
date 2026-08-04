@@ -39,15 +39,12 @@ function barcodeToDataURL(code) {
 
 // ── Generate PDF with barcode labels ─────────────────────────────
 // Sticker: 35mm wide × 25mm tall — maximises count on A4
-// Layout: 6 cols × 11 rows = 66 stickers/page (3mm margin, 0mm gap — flush)
+// Layout: 6 cols × 11 rows = 66 stickers/page (flush, no gap)
 async function generateLabelPDF(items, copies) {
   const { jsPDF } = await import('jspdf')
 
-  // Sticker dimensions (mm)
   const LW = 35, LH = 25
-  // Page margins — tiny so stickers pack edge-to-edge
   const MX = 0, MY = 0
-  // Zero gap between stickers (cut line only, no spacing)
   const GX = 0, GY = 0
   const PW = 210, PH = 297
 
@@ -70,46 +67,43 @@ async function generateLabelPDF(items, copies) {
     const x   = MX + col * (LW + GX)
     const y   = MY + row * (LH + GY)
 
-    // Thin cut border
+    // Cut border
     doc.setDrawColor(180, 180, 180)
     doc.setLineWidth(0.15)
     doc.rect(x, y, LW, LH)
 
-    // Row 1 — Shop name: RED, bold, centered, font 6
-    doc.setFontSize(6)
+    // ── ROW 1: Shop name — red bold, y+2.5 ──
+    doc.setFontSize(6.5)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(200, 0, 0)
-    doc.text('MAYUR MASALA CENTER', x + LW / 2, y + 2, { align: 'center' })
+    doc.text('MAYUR MASALA CENTER', x + LW / 2, y + 2.5, { align: 'center' })
 
-    // Row 2 — Barcode digits: BLACK, bold, centered, font 11 (BIG & BOLD)
-    doc.setFontSize(11)
+    // ── ROW 2: Item name (left) + Display price (right) — green bold, y+5.5 ──
+    doc.setFontSize(6.5)
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(20, 20, 20)
-    doc.text(item.barcode, x + LW / 2, y + 6, { align: 'center' })
+    doc.setTextColor(0, 130, 60)
+    const maxChars = 15
+    const name = item.name.length > maxChars ? item.name.slice(0, maxChars - 1) + '…' : item.name
+    doc.text(name, x + 1, y + 5.5)
+    const displayPrice = item.display_price ?? item.price * 2
+    doc.text(`Rs.${Number(displayPrice).toFixed(2)}`, x + LW - 1, y + 5.5, { align: 'right' })
 
-    // Barcode image — small, centered below digits
+    // ── ROW 3: Barcode IMAGE — full width, tall to fill space, y+6.5 to y+19 ──
+    // Height = 12.5mm — maximises bar zone without touching digits below
     try {
       const bc = await barcodeToDataURL(item.barcode)
-      doc.addImage(bc, 'PNG', x + (LW - 24) / 2, y + 8.5, 24, 5)
+      doc.addImage(bc, 'PNG', x + 0.5, y + 6.5, LW - 1, 12.5)
     } catch (e) {
       doc.setFontSize(5)
       doc.setTextColor(150)
       doc.text(item.barcode, x + LW / 2, y + 13, { align: 'center' })
     }
 
-    // Bottom row — Item name: GREEN, bold, left, font 5.5
-    doc.setFontSize(5.5)
+    // ── ROW 4: Barcode DIGITS — font 11 bold BLACK, y+23 — DO NOT CHANGE SIZE ──
+    doc.setFontSize(11)
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(0, 130, 60)
-    const maxChars = 18
-    const name = item.name.length > maxChars ? item.name.slice(0, maxChars - 1) + '…' : item.name
-    doc.text(name, x + 1.5, y + 16)
-
-    // Bottom row — Price: GREEN, bold, right, font 5.5
-    doc.setFontSize(5.5)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(0, 130, 60)
-    doc.text(`Rs.${Number(item.price).toFixed(2)}`, x + LW - 1.5, y + 16, { align: 'right' })
+    doc.setTextColor(20, 20, 20)
+    doc.text(item.barcode, x + LW / 2, y + 23.5, { align: 'center' })
   }
 
   return doc
@@ -201,7 +195,7 @@ function PrintModal({ items, title, onClose }) {
 }
 
 // ── Barcode preview card ──────────────────────────────────────────
-function BarcodeImage({ code, name, price }) {
+function BarcodeImage({ code, name, price, display_price }) {
   const svgRef = useRef()
   useEffect(() => {
     if (svgRef.current && code) {
@@ -218,7 +212,14 @@ function BarcodeImage({ code, name, price }) {
     <div className="barcode-card">
       <svg ref={svgRef} style={{ maxWidth: '100%' }} />
       <div className="barcode-name">{name}</div>
-      <div className="barcode-price">₹{Number(price).toFixed(2)}</div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 4 }}>
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+          Actual: <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600 }}>₹{Number(price).toFixed(2)}</span>
+        </div>
+        <div style={{ fontSize: '0.75rem', color: 'var(--success)', fontWeight: 700 }}>
+          Label: ₹{Number(display_price ?? price * 2).toFixed(2)}
+        </div>
+      </div>
     </div>
   )
 }
@@ -229,7 +230,7 @@ export default function ItemsPage() {
   const [items, setItems]       = useState([])
   const [loading, setLoading]   = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm]         = useState({ name: '', price: '' })
+  const [form, setForm]         = useState({ name: '', price: '', display_price: '' })
   const [saving, setSaving]     = useState(false)
   const [searchQ, setSearchQ]   = useState('')
   // printTarget: null | 'all' | single item object
@@ -249,15 +250,20 @@ export default function ItemsPage() {
     if (!form.name.trim() || !form.price) return toast('Please fill all fields', 'error')
     const price = parseFloat(form.price)
     if (isNaN(price) || price <= 0) return toast('Enter a valid price', 'error')
+    // display_price defaults to double of actual price if not set
+    const display_price = form.display_price
+      ? parseFloat(form.display_price)
+      : price * 2
+    if (isNaN(display_price) || display_price <= 0) return toast('Enter a valid display price', 'error')
     setSaving(true)
     const barcode = generateBarcodeCode(form.name, price)
-    const { error } = await supabase.from('items').insert({ name: form.name.trim(), price, barcode })
+    const { error } = await supabase.from('items').insert({ name: form.name.trim(), price, display_price, barcode })
     if (error) {
       if (error.code === '23505') toast('Item with similar code exists, try a different name', 'error')
-      else toast('Failed to save item', 'error')
+      else toast('Failed to save item: ' + error.message, 'error')
     } else {
       toast(`"${form.name}" added!`)
-      setForm({ name: '', price: '' })
+      setForm({ name: '', price: '', display_price: '' })
       setShowForm(false)
       fetchItems()
     }
@@ -311,7 +317,7 @@ export default function ItemsPage() {
         <div className="barcode-grid">
           {filtered.map(item => (
             <div key={item.id} style={{ position: 'relative' }}>
-              <BarcodeImage code={item.barcode} name={item.name} price={item.price} />
+              <BarcodeImage code={item.barcode} name={item.name} price={item.price} display_price={item.display_price} />
               <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <button className="btn btn-dark btn-sm" style={{ padding: '4px 8px', minHeight: 30, fontSize: '0.72rem' }}
                   title="Print label" onClick={() => setPrintTarget(item)}>🖨️</button>
@@ -328,7 +334,7 @@ export default function ItemsPage() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
           <div className="modal">
             <div className="modal-title">Add New Item</div>
-            <div className="modal-subtitle">A unique barcode will be generated automatically</div>
+            <div className="modal-subtitle">Barcode generated automatically · Display price printed on label</div>
             <div className="form-group">
               <label className="form-label">Item Name</label>
               <input className="form-input" placeholder="e.g. Basmati Rice 5kg"
@@ -337,11 +343,28 @@ export default function ItemsPage() {
                 onKeyDown={e => e.key === 'Enter' && handleAdd()} />
             </div>
             <div className="form-group">
-              <label className="form-label">Price (₹)</label>
-              <input className="form-input" type="number" min="0" step="0.01" placeholder="e.g. 299.00"
+              <label className="form-label">Price (₹) — actual billing price</label>
+              <input className="form-input" type="number" min="0" step="0.01" placeholder="e.g. 30.00"
                 value={form.price}
-                onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
+                onChange={e => setForm(f => ({
+                  ...f,
+                  price: e.target.value,
+                  // auto-fill display price as double if not manually set
+                  display_price: f._displayEdited ? f.display_price : String(parseFloat(e.target.value) * 2 || '')
+                }))}
                 onKeyDown={e => e.key === 'Enter' && handleAdd()} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Display Price (₹) — printed on label</label>
+              <input className="form-input" type="number" min="0" step="0.01" placeholder="Auto: 2× actual price"
+                value={form.display_price}
+                onChange={e => setForm(f => ({ ...f, display_price: e.target.value, _displayEdited: true }))}
+                onKeyDown={e => e.key === 'Enter' && handleAdd()} />
+              {form.price && (
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                  Actual ₹{parseFloat(form.price) || 0} → Label ₹{parseFloat(form.display_price) || (parseFloat(form.price) || 0) * 2}
+                </div>
+              )}
             </div>
             {form.name && form.price && (
               <div style={{ background: 'var(--paper)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', marginBottom: 16, textAlign: 'center' }}>
@@ -352,7 +375,7 @@ export default function ItemsPage() {
               </div>
             )}
             <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn btn-secondary btn-full" onClick={() => setShowForm(false)}>Cancel</button>
+              <button className="btn btn-secondary btn-full" onClick={() => { setShowForm(false); setForm({ name: '', price: '', display_price: '' }) }}>Cancel</button>
               <button className="btn btn-primary btn-full" onClick={handleAdd} disabled={saving}>
                 {saving ? 'Saving…' : 'Add Item'}
               </button>

@@ -104,7 +104,7 @@ export default async function handler(req, res) {
   // Items column header (58mm ≈ 32 chars at normal size)
   //  #   Name             Qty   Amt
   //  1   Jeera            2   24.00
-  rows.push(text('#  Item             Qty    Amt', { bold: 1, format: 4 }))
+  rows.push(text('#  Item             Qty    Amt', { bold: 1, format: 3 }))
   rows.push(text(DASHED, { format: 4 }))
 
   let subtotal = 0
@@ -130,7 +130,7 @@ export default async function handler(req, res) {
     rows.push(text(`Discount (${discPct}%) : -Rs. ${discAmt.toFixed(2)}`, { align: 2 }))
   }
   rows.push(text(SOLID))
-  rows.push(text(`TOTAL : Rs. ${total.toFixed(2)}`, { bold: 1, align: 1, format: 3.5 }))
+  rows.push(text(`TOTAL : Rs. ${total.toFixed(2)}`, { align: 1, format: 3.5 }))
   rows.push(text(SOLID))
 
   if (bill.status === 'paid') {

@@ -1,9 +1,124 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { BrowserMultiFormatReader } from '@zxing/library'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../components/Toast'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/AuthContext'
+
+// ── Barcode scanner hook ──────────────────────────────────────────
+// Uses native BarcodeDetector API (Chrome Android/Desktop) — extremely fast.
+// Falls back to @zxing only if BarcodeDetector unavailable (older browsers).
+// FORMAT: only CODE128 — no wasted cycles on QR/DataMatrix/etc.
+function useBarcodeScanner(videoRef, onDetected, enabled) {
+  const rafRef       = useRef(null)
+  const detectorRef  = useRef(null)
+  const zxingRef     = useRef(null)
+  const lastCodeRef  = useRef(null)
+  const lastTimeRef  = useRef(0)
+
+  useEffect(() => {
+    if (!enabled) return
+
+    let stopped = false
+
+    async function init() {
+      // ── Option A: native BarcodeDetector (fast, no library) ──
+      if ('BarcodeDetector' in window) {
+        try {
+          const supported = await BarcodeDetector.getSupportedFormats()
+          const formats   = supported.includes('code_128') ? ['code_128'] : supported
+          detectorRef.current = new BarcodeDetector({ formats })
+
+          const detect = async () => {
+            if (stopped) return
+            const video = videoRef.current
+            if (video && video.readyState === 4) {
+              try {
+                const codes = await detectorRef.current.detect(video)
+                if (codes.length > 0) {
+                  const code = codes[0].rawValue
+                  const now  = Date.now()
+                  // Debounce: ignore same code within 1.5s
+                  if (code !== lastCodeRef.current || now - lastTimeRef.current > 1500) {
+                    lastCodeRef.current = code
+                    lastTimeRef.current = now
+                    onDetected(code)
+                  }
+                }
+              } catch (_) {}
+            }
+            rafRef.current = requestAnimationFrame(detect)
+          }
+          rafRef.current = requestAnimationFrame(detect)
+          return
+        } catch (_) {}
+      }
+
+      // ── Option B: ZXing fallback with CODE128 hint ──
+      const { BrowserMultiFormatReader, BarcodeFormat, DecodeHintType } = await import('@zxing/library')
+      const hints = new Map()
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.CODE_128])
+      hints.set(DecodeHintType.TRY_HARDER, false)
+      const reader = new BrowserMultiFormatReader(hints, 150) // 150ms scan interval
+      zxingRef.current = reader
+      await reader.decodeFromVideoDevice(null, videoRef.current, (result) => {
+        if (!result || stopped) return
+        const code = result.getText()
+        const now  = Date.now()
+        if (code !== lastCodeRef.current || now - lastTimeRef.current > 1500) {
+          lastCodeRef.current = code
+          lastTimeRef.current = now
+          onDetected(code)
+        }
+      })
+    }
+
+    init()
+
+    return () => {
+      stopped = true
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      if (zxingRef.current) { try { zxingRef.current.reset() } catch (_) {} }
+    }
+  }, [enabled])
+}
+
+// ── Camera stream hook ────────────────────────────────────────────
+// Opens back camera directly — avoids ZXing's slow device enumeration.
+function useCameraStream(videoRef, enabled) {
+  const streamRef = useRef(null)
+
+  useEffect(() => {
+    if (!enabled) return
+
+    let active = true
+    navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' }, // back camera
+        width:      { ideal: 1280 },
+        height:     { ideal: 720 },
+      },
+      audio: false,
+    }).then(stream => {
+      if (!active) { stream.getTracks().forEach(t => t.stop()); return }
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        videoRef.current.play()
+      }
+    }).catch(err => {
+      console.error('Camera error:', err)
+    })
+
+    return () => {
+      active = false
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop())
+        streamRef.current = null
+      }
+      if (videoRef.current) videoRef.current.srcObject = null
+    }
+  }, [enabled])
+}
 function ManualItemRow({ onAdd }) {
   const [name, setName]   = useState('')
   const [price, setPrice] = useState('')
@@ -121,103 +236,75 @@ function ManualItemRow({ onAdd }) {
 
 // Steps: 'start' | 'scanning' | 'result' | 'overview'
 export default function ScanPage() {
-  const toast = useToast()
+  const toast    = useToast()
   const navigate = useNavigate()
   const { user } = useAuth()
 
-  const [step, setStep] = useState('start')
+  const [step, setStep]               = useState('start')
   const [customerName, setCustomerName] = useState('')
-  const [cart, setCart] = useState([]) // [{item, qty}]
-  const [scannedItem, setScannedItem] = useState(null) // {name, price, barcode}
-  const [scanning, setScanning] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState('')
-  const [notFound, setNotFound] = useState(false)
+  const [cart, setCart]               = useState([])
+  const [scannedItem, setScannedItem] = useState(null)
+  const [submitting, setSubmitting]   = useState(false)
+  const [cameraError, setCameraError] = useState('')
+  const [notFound, setNotFound]       = useState(false)
+  const [processing, setProcessing]   = useState(false) // lookup in progress
 
-  const videoRef = useRef(null)
-  const readerRef = useRef(null)
-  const scanLockRef = useRef(false)
+  // ── Fetch ALL items fresh every time scanning starts ─────────
+  // Guarantees new items are always available — no stale cache.
+  // One fetch per scanning session (not per scan), so still fast.
+  const itemsCacheRef = useRef(null)
+  const [cacheReady, setCacheReady] = useState(false)
 
-  const stopScanner = useCallback(() => {
-    if (readerRef.current) {
-      try { readerRef.current.reset() } catch (e) {}
-    }
-    setScanning(false)
-  }, [])
-
-  const startScanner = useCallback(async () => {
-    setScanning(true)
-    setNotFound(false)
-    setScannedItem(null)
-    scanLockRef.current = false
-
-    try {
-      const codeReader = new BrowserMultiFormatReader()
-      readerRef.current = codeReader
-
-      await codeReader.decodeFromVideoDevice(null, videoRef.current, async (result, err) => {
-        if (result && !scanLockRef.current) {
-          scanLockRef.current = true
-          const code = result.getText()
-
-          // Look up in Supabase
-          const { data, error: dbErr } = await supabase
-            .from('items')
-            .select('*')
-            .eq('barcode', code)
-            .single()
-
-          if (dbErr || !data) {
-            setNotFound(true)
-            toast(`Barcode "${code}" not found in items`, 'error')
-            setTimeout(() => {
-              scanLockRef.current = false
-              setNotFound(false)
-            }, 2500)
-          } else {
-            stopScanner()
-            setScannedItem(data)
-            setStep('result')
-          }
-        }
-      })
-    } catch (e) {
-      setScanning(false)
-      if (e.name === 'NotAllowedError') {
-        setError('Camera permission denied. Please allow camera access and try again.')
-      } else {
-        setError('Could not start camera: ' + e.message)
-      }
-    }
-  }, [stopScanner, toast])
-
-  // Start scanning when entering scanning step
   useEffect(() => {
-    if (step === 'scanning') {
-      startScanner()
-    }
-    return () => {
-      if (step === 'scanning') stopScanner()
-    }
+    if (step !== 'scanning') return
+    setCacheReady(false)
+    supabase.from('items').select('*').then(({ data }) => {
+      const map = {}
+      if (data) data.forEach(item => { map[item.barcode] = item })
+      itemsCacheRef.current = map
+      setCacheReady(true)
+    })
   }, [step])
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => stopScanner()
-  }, [stopScanner])
+  const videoRef    = useRef(null)
+  const scanActive  = step === 'scanning' && cacheReady  // only scan after items loaded
+  const notFoundRef = useRef(false)
+
+  // Handle a detected barcode code
+  const handleDetected = useCallback((code) => {
+    if (processing || notFoundRef.current) return
+
+    const cache = itemsCacheRef.current
+    if (!cache) return // still loading
+
+    const item = cache[code]
+    if (!item) {
+      notFoundRef.current = true
+      setNotFound(true)
+      toast(`"${code}" not found`, 'error')
+      setTimeout(() => {
+        notFoundRef.current = false
+        setNotFound(false)
+      }, 1500)
+      return
+    }
+
+    // Found instantly — no network call
+    setScannedItem(item)
+    setStep('result')
+  }, [processing, toast])
+
+  // Start camera + scanner only when scanning step is active
+  useCameraStream(videoRef, scanActive)
+  useBarcodeScanner(videoRef, handleDetected, scanActive && !processing)
 
   const handleNext = () => {
-    // Add scanned item to cart
     setCart(prev => {
       const existing = prev.find(c => c.item.barcode === scannedItem.barcode)
-      if (existing) {
-        return prev.map(c => c.item.barcode === scannedItem.barcode
-          ? { ...c, qty: c.qty + 1 }
-          : c
-        )
-      }
+      if (existing) return prev.map(c => c.item.barcode === scannedItem.barcode ? { ...c, qty: c.qty + 1 } : c)
       return [...prev, { item: scannedItem, qty: 1 }]
     })
+    setScannedItem(null)
     setStep('scanning')
   }
 
@@ -226,17 +313,13 @@ export default function ScanPage() {
     setStep('scanning')
   }
 
-  const handleDone = () => {
-    stopScanner()
-    setStep('overview')
-  }
+  const handleDone = () => setStep('overview')
 
   const handleRemoveCartItem = (barcode) => {
     setCart(prev => {
       const item = prev.find(c => c.item.barcode === barcode)
-      if (item.qty > 1) {
-        return prev.map(c => c.item.barcode === barcode ? { ...c, qty: c.qty - 1 } : c)
-      }
+      if (!item) return prev
+      if (item.qty > 1) return prev.map(c => c.item.barcode === barcode ? { ...c, qty: c.qty - 1 } : c)
       return prev.filter(c => c.item.barcode !== barcode)
     })
   }
@@ -244,37 +327,26 @@ export default function ScanPage() {
   const handleSubmit = async () => {
     if (cart.length === 0) return toast('Cart is empty', 'error')
     setSubmitting(true)
-
     const total = cart.reduce((sum, c) => sum + c.item.price * c.qty, 0)
 
     const { data: bill, error: billErr } = await supabase
       .from('bills')
       .insert({ customer_name: customerName.trim(), total_amount: total, status: 'pending', created_by: user?.email ?? '' })
-      .select()
-      .single()
+      .select().single()
 
-    if (billErr) {
-      toast('Failed to create bill', 'error')
-      setSubmitting(false)
-      return
-    }
+    if (billErr) { toast('Failed to create bill', 'error'); setSubmitting(false); return }
 
     const billItems = cart.map(c => ({
-      bill_id: bill.id,
-      item_id: c.item.id,
-      item_name: c.item.name,
+      bill_id:    bill.id,
+      item_id:    String(c.item.id).startsWith('manual-') ? null : c.item.id,
+      item_name:  c.item.name,
       item_price: c.item.price,
-      quantity: c.qty,
+      quantity:   c.qty,
     }))
 
     const { error: itemsErr } = await supabase.from('bill_items').insert(billItems)
-
-    if (itemsErr) {
-      toast('Bill created but items failed to save', 'error')
-    } else {
-      toast(`Bill submitted for ${customerName}!`)
-      navigate('/dashboard')
-    }
+    if (itemsErr) toast('Bill created but items failed to save', 'error')
+    else { toast(`Bill submitted for ${customerName}!`); navigate('/dashboard') }
     setSubmitting(false)
   }
 
@@ -345,11 +417,7 @@ export default function ScanPage() {
             <div className="scanner-title">📷 Scanning</div>
             <div className="scanner-subtitle">{customerName} · {cartCount} item{cartCount !== 1 ? 's' : ''} · ₹{cartTotal.toFixed(2)}</div>
           </div>
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={handleDone}
-            disabled={cart.length === 0}
-          >
+          <button className="btn btn-primary btn-sm" onClick={handleDone} disabled={cart.length === 0}>
             Done ({cartCount})
           </button>
         </div>
@@ -359,11 +427,17 @@ export default function ScanPage() {
             Point camera at barcode
           </p>
 
-          {error ? (
+          {!cacheReady ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: 32 }}>
+              <div style={{ width: 36, height: 36, border: '3px solid rgba(255,255,255,0.15)', borderTopColor: 'var(--teal)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem' }}>Loading items…</div>
+              <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+            </div>
+          ) : cameraError ? (
             <div style={{ background: '#3b1a1a', border: '1px solid var(--danger)', borderRadius: 'var(--radius)', padding: '20px', color: '#fca5a5', textAlign: 'center', maxWidth: 400, width: '100%' }}>
               <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>📵</div>
-              <div>{error}</div>
-              <button className="btn btn-secondary btn-sm mt-3" onClick={() => { setError(''); startScanner() }}>
+              <div>{cameraError}</div>
+              <button className="btn btn-secondary btn-sm mt-3" onClick={() => { setCameraError(''); setStep('scanning') }}>
                 Try Again
               </button>
             </div>
@@ -376,10 +450,7 @@ export default function ScanPage() {
                 </div>
               </div>
               {notFound && (
-                <div style={{
-                  position: 'absolute', bottom: 12, left: 0, right: 0, textAlign: 'center',
-                  color: '#fca5a5', background: 'rgba(239,68,68,0.15)', padding: '8px', fontSize: '0.8rem'
-                }}>
+                <div style={{ position: 'absolute', bottom: 12, left: 0, right: 0, textAlign: 'center', color: '#fca5a5', background: 'rgba(239,68,68,0.15)', padding: '8px', fontSize: '0.8rem' }}>
                   ✕ Barcode not found — try again
                 </div>
               )}
