@@ -136,13 +136,13 @@ export default async function handler(req, res) {
 
   if (bill.status === 'paid') {
     rows.push(BLANK)
-    rows.push(text('** PAID **', { bold: 1, align: 1, format: 2 }))  // double height+width
+    rows.push(text('** PAID **', { bold: 1, align: 1, format: 3 }))  // double height+width
   }
 
   rows.push(BLANK)
   // format: 3 = double width — "Thank you" is big & prominent
-  rows.push(text('Thank you!', { bold: 1, align: 1, format: 3 }))
-  rows.push(text('Shopping with us', { bold: 1, align: 1, format: 3 }))
+  rows.push(text('Thank you!', { bold: 1, align: 1, format: 4 }))
+  rows.push(text('Shopping with us', { bold: 1, align: 1, format: 4 }))
   rows.push(text(SHOP.tagline, { align: 1, format: 0 }))
   rows.push(BLANK)
   rows.push(BLANK)
