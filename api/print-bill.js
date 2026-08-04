@@ -66,9 +66,9 @@ export default async function handler(req, res) {
   const dateStr = new Date(bill.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', ...IST })
   const timeStr = new Date(bill.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', ...IST })
 
-  rows.push(text(`Bill: ${billNo(bill.id)}`, { bold: 1, format: 0 }))
+  rows.push(text(`Bill: ${billNo(bill.id)}`, {  format: 0 }))
   rows.push(text(`Date: ${dateStr} ${timeStr}`, { format: 0 }))
-  rows.push(text(`Cust: ${bill.customer_name}`, { bold: 1, format: 0 }))
+  rows.push(text(`Cust: ${bill.customer_name}`, { format: 0 }))
   if (bill.created_by) {
     rows.push(text(`By  : ${bill.created_by.split('@')[0]}`, { format: 0 }))
   }
@@ -109,7 +109,7 @@ export default async function handler(req, res) {
 
   rows.push(BLANK)
   rows.push(text('Thank you!', { bold: 1, align: 1, format: 3 }))
-  rows.push(text('Shopping with us', { bold: 1, align: 1, format: 4 }))
+  rows.push(text('Shopping with us', { align: 1, format: 4 }))
   rows.push(text(SHOP.tagline, { align: 1, format: 0 }))
   rows.push(BLANK)
   rows.push(BLANK)
