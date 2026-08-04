@@ -86,11 +86,11 @@ export default async function handler(req, res) {
   rows.push(text(SOLID))
 
   // Bill meta
-  const dateStr = new Date(bill.created_at).toLocaleDateString('en-IN', {
+  const dateStr = new Date(bill.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata',
     day: '2-digit', month: 'short', year: 'numeric'
   })
   const timeStr = new Date(bill.created_at).toLocaleTimeString('en-IN', {
-    hour: '2-digit', minute: '2-digit'
+    hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata'
   })
 
   rows.push(text(`Bill No : ${billNo(bill.id)}`, { bold: 1 }))
