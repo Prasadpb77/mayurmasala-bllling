@@ -17,8 +17,8 @@ function barcodeToDataURL(code) {
   return new Promise((resolve, reject) => {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
     JsBarcode(svg, code, {
-      format: 'CODE128', width: 2, height: 80,
-      displayValue: false, margin: 4,
+      format: 'CODE128', width: 3, height: 80,
+      displayValue: false, margin: 2,
       background: '#ffffff', lineColor: '#000000',
     })
     const xml = new XMLSerializer().serializeToString(svg)
@@ -39,13 +39,19 @@ function barcodeToDataURL(code) {
 }
 
 // ── Generate PDF: 40mm × 30mm labels, 5 cols × 9 rows = 45/page ──
+// 2mm col gap + 0.5mm row gap for clean cutting
+// Bar width:3 (~0.58mm) — comfortable scan
+// Digit font 8.5 — saves space, gives taller bars
 async function generateLabelPDF(items, copies) {
   const { jsPDF } = await import('jspdf')
 
   const LW = 40, LH = 30
-  const cols    = Math.floor(210 / LW)   // 5
-  const rows    = Math.floor(297 / LH)   // 9
-  const perPage = cols * rows             // 45
+  const GX = 2,  GY = 0.5   // cutting gaps
+
+  // 5×(40) + 4×(2) = 208mm ✓  9×(30) + 8×(0.5) = 274mm ✓
+  const cols    = 5
+  const rows    = 9
+  const perPage = cols * rows  // 45
 
   const labels = []
   for (const item of items) for (let i = 0; i < copies; i++) labels.push(item)
@@ -66,51 +72,52 @@ async function generateLabelPDF(items, copies) {
 
     const col = pagePos % cols
     const row = Math.floor(pagePos / cols)
-    const x   = col * LW
-    const y   = row * LH
+    const x   = col * (LW + GX)   // 0, 42, 84, 126, 168
+    const y   = row * (LH + GY)   // 0, 30.5, 61, ...
 
-    // ── Cut border ──
-    doc.setDrawColor(180, 180, 180)
-    doc.setLineWidth(0.2)
+    // ── Cut border (dashed light grey) ──
+    doc.setDrawColor(200, 200, 200)
+    doc.setLineWidth(0.15)
     doc.rect(x, y, LW, LH)
 
     // ── LOGO — top-left, 10×10mm ──
-    const logoSize = 10
     if (logoImg) {
-      doc.addImage(LOGO_B64, 'PNG', x + 1, y + 1, logoSize, logoSize)
+      doc.addImage(LOGO_B64, 'PNG', x + 1, y + 1, 10, 10)
     }
 
     // ── ITEM NAME — right of logo, bold black ──
     doc.setFontSize(7)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(0, 0, 0)
-    const nameStartX = x + logoSize + 2
-    const maxChars   = 14
+    const tx = x + 12.5
+    const maxChars = 14
     const name = item.name.length > maxChars ? item.name.slice(0, maxChars - 1) + '…' : item.name
-    doc.text(name, nameStartX, y + 5)
+    doc.text(name, tx, y + 5)
 
     // ── DISPLAY PRICE — right of logo, bold green ──
     doc.setFontSize(9)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(0, 130, 60)
     const displayPrice = item.display_price ?? item.price * 2
-    doc.text(`Rs.${Number(displayPrice).toFixed(2)}`, nameStartX, y + 10.5)
+    doc.text(`Rs.${Number(displayPrice).toFixed(2)}`, tx, y + 10.5)
 
-    // ── BARCODE IMAGE — full width, y+12.5 to y+23.5 (11mm tall) ──
+    // ── BARCODE IMAGE — full width, taller now (13mm) ──
+    // More height = faster scanner lock-on
     try {
       const bc = await barcodeToDataURL(item.barcode)
-      doc.addImage(bc, 'PNG', x + 0.5, y + 12.5, LW - 1, 11)
+      doc.addImage(bc, 'PNG', x + 0.5, y + 12.5, LW - 1, 13)
     } catch (e) {
       doc.setFontSize(5)
       doc.setTextColor(150)
-      doc.text(item.barcode, x + LW / 2, y + 18, { align: 'center' })
+      doc.text(item.barcode, x + LW / 2, y + 19, { align: 'center' })
     }
 
-    // ── BARCODE DIGITS — font 10.5 bold BLACK, zero side padding ──
-    doc.setFontSize(10.5)
+    // ── BARCODE DIGITS — font 8.5 bold, bottom ──
+    // Smaller than before but still readable; bars do the scanning work
+    doc.setFontSize(8.5)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(20, 20, 20)
-    doc.text(item.barcode, x + LW / 2, y + 27.5, { align: 'center' })
+    doc.text(item.barcode, x + LW / 2, y + 28.5, { align: 'center' })
   }
 
   return doc
