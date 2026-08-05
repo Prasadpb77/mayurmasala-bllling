@@ -140,24 +140,33 @@ async function generateLabelPDF(items, paperKey = 'A4') {
 // ── Print modal ───────────────────────────────────────────────────
 function PrintModal({ items, title, onClose }) {
   const toast = useToast()
-  const [copies, setCopies]     = useState(1)
   const [paperKey, setPaperKey] = useState('A4')
   const [genPDF, setGenPDF]     = useState(false)
 
-  const total               = items.length * copies
   const { cols, rows, perPage } = stickerFitInfo(paperKey)
-  const pagesNeeded         = Math.ceil(total / perPage)
+
+  // Auto-fill: repeat items to fill exactly one full page (max stickers)
+  const expandedItems = (() => {
+    if (items.length === 0) return []
+    const result = []
+    for (let i = 0; i < perPage; i++) {
+      result.push(items[i % items.length])
+    }
+    return result
+  })()
+
+  const total       = expandedItems.length
+  const pagesNeeded = 1
 
   const handlePDF = async () => {
-    if (copies < 1) return toast('Enter at least 1 copy', 'error')
     setGenPDF(true)
     try {
-      const doc = await generateLabelPDF(items, copies, paperKey)
+      const doc = await generateLabelPDF(expandedItems, paperKey)
       const fname = items.length === 1
-        ? `label-${items[0].name.replace(/\s+/g, '-').toLowerCase()}-x${copies}-${paperKey}.pdf`
-        : `mayur-masala-labels-x${copies}-${paperKey}.pdf`
+        ? `label-${items[0].name.replace(/\s+/g, '-').toLowerCase()}-${paperKey}.pdf`
+        : `mayur-masala-labels-${paperKey}.pdf`
       doc.save(fname)
-      toast(`PDF downloaded — ${total} label${total > 1 ? 's' : ''} on ${pagesNeeded} page${pagesNeeded > 1 ? 's' : ''}`)
+      toast(`PDF downloaded — ${total} label${total > 1 ? 's' : ''} on 1 page`)
       onClose()
     } catch (e) { toast('PDF generation failed: ' + e.message, 'error') }
     setGenPDF(false)
@@ -168,7 +177,7 @@ function PrintModal({ items, title, onClose }) {
       <div className="modal">
         <div className="modal-title">🖨️ {title}</div>
         <div className="modal-subtitle">
-          {items.length === 1 ? items[0].name : `${items.length} items`} — 50×50mm stickers
+          {items.length === 1 ? items[0].name : `${items.length} items`} — auto-fills one full page of 50×50mm stickers
         </div>
 
         {items.length > 1 && items.length <= 8 && (
@@ -213,33 +222,19 @@ function PrintModal({ items, title, onClose }) {
           </div>
         </div>
 
-        {/* ── Copies per item ── */}
-        <div className="form-group">
-          <label className="form-label">Copies per item</label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button className="btn btn-secondary" style={{ width: 44, padding: 0, flexShrink: 0 }}
-              onClick={() => setCopies(c => Math.max(1, c - 1))}>−</button>
-            <input className="form-input" type="number" min="1" max="500" value={copies}
-              onChange={e => setCopies(Math.max(1, Math.min(500, parseInt(e.target.value) || 1)))}
-              style={{ textAlign: 'center', fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '1.1rem' }} />
-            <button className="btn btn-secondary" style={{ width: 44, padding: 0, flexShrink: 0 }}
-              onClick={() => setCopies(c => Math.min(500, c + 1))}>+</button>
-          </div>
-        </div>
-
         {/* ── Stats summary ── */}
         <div style={{ background: 'var(--paper)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Total labels</span>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Stickers on page</span>
             <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '1.05rem' }}>{total}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Stickers per {paperKey} page</span>
-            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, fontSize: '0.85rem' }}>{perPage} ({cols}×{rows})</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Grid ({paperKey})</span>
+            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, fontSize: '0.85rem' }}>{cols} cols × {rows} rows</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Pages needed</span>
-            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, fontSize: '0.85rem' }}>{pagesNeeded}</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Pages</span>
+            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, fontSize: '0.85rem' }}>1</span>
           </div>
         </div>
 
