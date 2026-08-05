@@ -284,7 +284,7 @@ async function generateInvoicePDF(bill, items) {
 
   if (discPct > 0) {
     y += 5
-    txt(\`Discount (\${discPct}%)\`, cols.item, y, { size: 8, color: [180, 0, 0] })
+    txt(`Discount (${discPct}%)`, cols.item, y, { size: 8, color: [180, 0, 0] })
     txt('- ' + discAmt.toFixed(2), W - 12, y, { size: 8, align: 'right', color: [180,0,0] })
   }
 
@@ -313,7 +313,7 @@ async function generateInvoicePDF(bill, items) {
 async function uploadBillPDF(bill, items) {
   const doc      = await generateInvoicePDF(bill, items)
   const pdfBytes = doc.output('arraybuffer')
-  const filename = \`bills/\${billNo(bill.id)}-\${Date.now()}.pdf\`
+  const filename = `bills/${billNo(bill.id)}-${Date.now()}.pdf`
   const { error } = await supabase.storage
     .from('bills')
     .upload(filename, pdfBytes, { contentType: 'application/pdf', upsert: true })
@@ -343,9 +343,9 @@ function WhatsAppModal({ bill, items, onClose }) {
 
       const total    = Number(bill.total_amount).toFixed(2)
       const dateStr  = new Date(bill.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })
-      const message  = \`🧾 *Mayur Masala Center*\n\nDear *\${bill.customer_name}*,\n\nYour bill \${billNo(bill.id)} dated \${dateStr}\n💰 Total: *Rs. \${total}*\n\nDownload your invoice:\n\${url}\n\nThank you for shopping with us! 🙏\n_Mayur Masala Center & Pooja Bhandar_\`
+      const message  = `🧾 *Mayur Masala Center*\n\nDear *${bill.customer_name}*,\n\nYour bill ${billNo(bill.id)} dated ${dateStr}\n💰 Total: *Rs. ${total}*\n\nDownload your invoice:\n${url}\n\nThank you for shopping with us! 🙏\n_Mayur Masala Center & Pooja Bhandar_`
 
-      const waUrl = \`https://wa.me/\${fullNumber}?text=\${encodeURIComponent(message)}\`
+      const waUrl = `https://wa.me/${fullNumber}?text=${encodeURIComponent(message)}`
       window.open(waUrl, '_blank')
       setStep('done')
       toast('WhatsApp opened!')
