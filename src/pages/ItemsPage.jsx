@@ -40,29 +40,35 @@ function barcodeToDataURL(code) {
 
 // ── Paper size definitions ────────────────────────────────────────
 const PAPER_SIZES = {
+  'A1': { w: 594, h: 841, jspdf: 'a1' },
   'A2': { w: 420, h: 594, jspdf: 'a2' },
   'A3': { w: 297, h: 420, jspdf: 'a3' },
   'A4': { w: 210, h: 297, jspdf: 'a4' },
   'A5': { w: 148, h: 210, jspdf: 'a5' },
 }
 
-// Label: 40mm wide × 30mm tall
+// ── Sticker size: 50mm × 50mm (square) ───────────────────────────
 // Internal layout (all measurements from label top-left corner):
-//   y+1  to y+12  → Logo (10mm) + Item name + Price  (11mm zone)
-//   y+12 to y+25  → Barcode bars                     (13mm zone)
-//   y+25 to y+29  → Barcode digits                   (4mm zone)
-//   y+29 to y+30  → Bottom padding before cut line    (1mm)
-// Gap between labels: GX=2mm (cols), GY=1.5mm (rows) — easy cutting
+//   y+3  to y+17  → Logo (14×14mm) + Item name + Price  (14mm zone, 3mm top pad)
+//   y+17 to y+39  → Barcode bars                        (22mm zone)
+//   y+39 to y+47  → Barcode digits                      (8mm zone)
+//   y+47 to y+50  → Bottom padding                      (3mm)
+// Gap between labels: GX=2mm (cols), GY=2mm (rows) — easy cutting
+const LW = 50, LH = 50
+const GX = 2,  GY = 2
+
+function stickerFitInfo(paperKey = 'A4') {
+  const paper = PAPER_SIZES[paperKey]
+  const cols  = Math.floor((paper.w + GX) / (LW + GX))
+  const rows  = Math.floor((paper.h + GY) / (LH + GY))
+  return { cols, rows, perPage: cols * rows }
+}
+
 async function generateLabelPDF(items, copies, paperKey = 'A4') {
   const { jsPDF } = await import('jspdf')
 
   const paper  = PAPER_SIZES[paperKey]
-  const LW = 40, LH = 30
-  const GX = 2,  GY = 1.5   // gaps for easy cutting
-
-  const cols    = Math.floor((paper.w + GX) / (LW + GX))
-  const rows    = Math.floor((paper.h + GY) / (LH + GY))
-  const perPage = cols * rows
+  const { cols, rows, perPage } = stickerFitInfo(paperKey)
 
   const labels = []
   for (const item of items) for (let i = 0; i < copies; i++) labels.push(item)
@@ -92,39 +98,39 @@ async function generateLabelPDF(items, copies, paperKey = 'A4') {
     doc.setLineWidth(0.15)
     doc.rect(x, y, LW, LH)
 
-    // ── LOGO — top-left, 10×10mm, 1mm padding ──
-    doc.addImage(LOGO_B64, 'PNG', x + 1, y + 1, 10, 10)
+    // ── LOGO — top-left, 14×14mm, 3mm top/left padding ──
+    doc.addImage(LOGO_B64, 'PNG', x + 2, y + 3, 14, 14)
 
     // ── ITEM NAME — right of logo ──
-    const tx = x + 12.5
-    doc.setFontSize(7)
+    const tx = x + 18
+    doc.setFontSize(9)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(0, 0, 0)
-    const maxChars = 14
+    const maxChars = 17
     const name = item.name.length > maxChars ? item.name.slice(0, maxChars - 1) + '…' : item.name
-    doc.text(name, tx, y + 5.5)
+    doc.text(name, tx, y + 8)
 
     // ── DISPLAY PRICE — right of logo, green ──
-    doc.setFontSize(9.5)
+    doc.setFontSize(11.5)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(0, 130, 60)
     const displayPrice = item.display_price ?? item.price * 2
-    doc.text(`Rs.${Number(displayPrice).toFixed(2)}`, tx, y + 11)
+    doc.text(`Rs.${Number(displayPrice).toFixed(2)}`, tx, y + 14.5)
 
-    // ── BARCODE IMAGE — y+12 to y+25 = 13mm tall ──
+    // ── BARCODE IMAGE — y+17 to y+39 = 22mm tall ──
     try {
       const bc = await barcodeToDataURL(item.barcode)
-      doc.addImage(bc, 'PNG', x + 0.5, y + 12, LW - 1, 13)
+      doc.addImage(bc, 'PNG', x + 0.5, y + 17, LW - 1, 22)
     } catch (e) {
-      doc.setFontSize(5); doc.setTextColor(150)
-      doc.text(item.barcode, x + LW / 2, y + 18.5, { align: 'center' })
+      doc.setFontSize(6); doc.setTextColor(150)
+      doc.text(item.barcode, x + LW / 2, y + 28, { align: 'center' })
     }
 
-    // ── BARCODE DIGITS — y+27, font 8.5, centred ──
-    doc.setFontSize(8.5)
+    // ── BARCODE DIGITS — y+41.5, font 11, centred ──
+    doc.setFontSize(11)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(20, 20, 20)
-    doc.text(item.barcode, x + LW / 2, y + 27, { align: 'center' })
+    doc.text(item.barcode, x + LW / 2, y + 41.5, { align: 'center' })
   }
 
   // ── Summary: labels per page per paper size ──
@@ -135,20 +141,24 @@ async function generateLabelPDF(items, copies, paperKey = 'A4') {
 // ── Print modal ───────────────────────────────────────────────────
 function PrintModal({ items, title, onClose }) {
   const toast = useToast()
-  const [copies, setCopies] = useState(1)
-  const [genPDF, setGenPDF] = useState(false)
-  const total = items.length * copies
+  const [copies, setCopies]     = useState(1)
+  const [paperKey, setPaperKey] = useState('A4')
+  const [genPDF, setGenPDF]     = useState(false)
+
+  const total               = items.length * copies
+  const { cols, rows, perPage } = stickerFitInfo(paperKey)
+  const pagesNeeded         = Math.ceil(total / perPage)
 
   const handlePDF = async () => {
     if (copies < 1) return toast('Enter at least 1 copy', 'error')
     setGenPDF(true)
     try {
-      const doc = await generateLabelPDF(items, copies)
+      const doc = await generateLabelPDF(items, copies, paperKey)
       const fname = items.length === 1
-        ? `label-${items[0].name.replace(/\s+/g, '-').toLowerCase()}-x${copies}.pdf`
-        : `mayur-masala-labels-x${copies}.pdf`
+        ? `label-${items[0].name.replace(/\s+/g, '-').toLowerCase()}-x${copies}-${paperKey}.pdf`
+        : `mayur-masala-labels-x${copies}-${paperKey}.pdf`
       doc.save(fname)
-      toast(`PDF downloaded — ${total} label${total > 1 ? 's' : ''}`)
+      toast(`PDF downloaded — ${total} label${total > 1 ? 's' : ''} on ${pagesNeeded} page${pagesNeeded > 1 ? 's' : ''}`)
       onClose()
     } catch (e) { toast('PDF generation failed: ' + e.message, 'error') }
     setGenPDF(false)
@@ -159,7 +169,7 @@ function PrintModal({ items, title, onClose }) {
       <div className="modal">
         <div className="modal-title">🖨️ {title}</div>
         <div className="modal-subtitle">
-          {items.length === 1 ? items[0].name : `${items.length} items`} — 40×30mm · 45 per A4
+          {items.length === 1 ? items[0].name : `${items.length} items`} — 50×50mm stickers
         </div>
 
         {items.length > 1 && items.length <= 8 && (
@@ -177,6 +187,34 @@ function PrintModal({ items, title, onClose }) {
           </div>
         )}
 
+        {/* ── Paper size selector ── */}
+        <div className="form-group">
+          <label className="form-label">Paper Size</label>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {Object.keys(PAPER_SIZES).map(key => (
+              <button
+                key={key}
+                onClick={() => setPaperKey(key)}
+                style={{
+                  flex: 1,
+                  padding: '7px 0',
+                  borderRadius: 'var(--radius-sm)',
+                  border: paperKey === key ? '2px solid var(--accent)' : '1px solid var(--border)',
+                  background: paperKey === key ? 'var(--accent)' : 'var(--paper)',
+                  color: paperKey === key ? '#fff' : 'var(--ink)',
+                  fontWeight: 700,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {key}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Copies per item ── */}
         <div className="form-group">
           <label className="form-label">Copies per item</label>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -190,25 +228,30 @@ function PrintModal({ items, title, onClose }) {
           </div>
         </div>
 
+        {/* ── Stats summary ── */}
         <div style={{ background: 'var(--paper)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
             <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Total labels</span>
             <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '1.05rem' }}>{total}</span>
           </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Stickers per {paperKey} page</span>
+            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, fontSize: '0.85rem' }}>{perPage} ({cols}×{rows})</span>
+          </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Pages needed (45/page)</span>
-            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, fontSize: '0.85rem' }}>{Math.ceil(total / 45)}</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Pages needed</span>
+            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, fontSize: '0.85rem' }}>{pagesNeeded}</span>
           </div>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button className="btn btn-primary btn-full btn-lg" onClick={handlePDF} disabled={genPDF}>
-            {genPDF ? '⏳ Generating PDF…' : '⬇️ Download PDF'}
+            {genPDF ? '⏳ Generating PDF…' : `⬇️ Download ${paperKey} PDF`}
           </button>
           <button className="btn btn-ghost btn-full" onClick={onClose} disabled={genPDF}>Cancel</button>
         </div>
         <div style={{ textAlign: 'center', fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 10 }}>
-          A4 · 5 cols × 9 rows · 40×30mm per label · CODE128
+          {paperKey} · {cols} cols × {rows} rows · 50×50mm · logo 14mm · barcode 22mm · CODE128
         </div>
       </div>
     </div>
@@ -304,7 +347,7 @@ export default function ItemsPage() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <div>
           <h1 className="page-title">Items & Barcodes</h1>
-          <p className="page-subtitle">PDF sticker sheet · 40×30mm · 45 per A4</p>
+          <p className="page-subtitle">PDF sticker sheet · 50×50mm · A1 / A2 / A3 / A4 / A5</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           <button className="btn btn-secondary"
