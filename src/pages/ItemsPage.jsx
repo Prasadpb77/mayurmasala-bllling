@@ -64,14 +64,13 @@ function stickerFitInfo(paperKey = 'A4') {
   return { cols, rows, perPage: cols * rows }
 }
 
-async function generateLabelPDF(items, copies, paperKey = 'A4') {
+async function generateLabelPDF(items, paperKey = 'A4') {
   const { jsPDF } = await import('jspdf')
 
   const paper  = PAPER_SIZES[paperKey]
   const { cols, rows, perPage } = stickerFitInfo(paperKey)
 
-  const labels = []
-  for (const item of items) for (let i = 0; i < copies; i++) labels.push(item)
+  const labels = [...items]
 
   const doc = new jsPDF({ unit: 'mm', format: paper.jspdf })
 
