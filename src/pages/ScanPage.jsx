@@ -138,6 +138,9 @@ function ManualAddModal({ onAdd, onClose }) {
         borderRadius: '18px 18px 0 0',
         padding: '0 0 calc(env(safe-area-inset-bottom, 0px) + 24px)',
         zIndex: 201,
+        maxWidth: '100vw',
+        boxSizing: 'border-box',
+        overflowX: 'hidden',
         animation: 'slideUp 0.22s cubic-bezier(0.32,0.72,0,1)',
       }}>
         <style>{`
@@ -191,15 +194,15 @@ function ManualAddModal({ onAdd, onClose }) {
           </div>
 
           {/* Price + Qty */}
-          <div style={{ display: 'flex', gap: 10 }}>
-            <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', gap: 8, minWidth: 0 }}>
+            <div style={{ flex: '1 1 auto', minWidth: 0 }}>
               <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 600, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>
                 Price (₹)
               </label>
               <input
                 style={{
                   width: '100%', boxSizing: 'border-box',
-                  padding: '11px 13px',
+                  padding: '11px 10px',
                   background: 'rgba(255,255,255,0.07)',
                   border: '1.5px solid rgba(255,255,255,0.12)',
                   borderRadius: 10, color: '#fff',
@@ -212,27 +215,29 @@ function ManualAddModal({ onAdd, onClose }) {
               />
             </div>
 
-            <div style={{ width: 110 }}>
+            <div style={{ flex: '0 0 auto', width: 96 }}>
               <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 600, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>
                 Qty
               </label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 3, width: '100%' }}>
                 <button
                   style={{
-                    width: 34, height: 42, flexShrink: 0,
+                    width: 26, height: 42, flexShrink: 0, padding: 0,
                     border: '1.5px solid rgba(255,255,255,0.15)',
                     borderRadius: 8, background: 'rgba(255,255,255,0.07)',
-                    color: '#fff', cursor: 'pointer', fontSize: '1.2rem',
+                    color: '#fff', cursor: 'pointer', fontSize: '1.05rem',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}
                   onClick={() => setQty(q => Math.max(1, q - 1))}
                 >−</button>
                 <input
                   style={{
-                    flex: 1, padding: '11px 4px',
+                    width: 34, flexShrink: 1, minWidth: 0,
+                    padding: '11px 2px', boxSizing: 'border-box',
                     background: 'rgba(255,255,255,0.07)',
                     border: '1.5px solid rgba(255,255,255,0.12)',
                     borderRadius: 8, color: '#fff',
-                    fontSize: '0.9rem', fontFamily: 'JetBrains Mono, monospace',
+                    fontSize: '0.85rem', fontFamily: 'JetBrains Mono, monospace',
                     fontWeight: 700, textAlign: 'center', outline: 'none',
                   }}
                   type="number" min="1"
@@ -241,10 +246,11 @@ function ManualAddModal({ onAdd, onClose }) {
                 />
                 <button
                   style={{
-                    width: 34, height: 42, flexShrink: 0,
+                    width: 26, height: 42, flexShrink: 0, padding: 0,
                     border: '1.5px solid rgba(255,255,255,0.15)',
                     borderRadius: 8, background: 'rgba(255,255,255,0.07)',
-                    color: '#fff', cursor: 'pointer', fontSize: '1.2rem',
+                    color: '#fff', cursor: 'pointer', fontSize: '1.05rem',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}
                   onClick={() => setQty(q => q + 1)}
                 >+</button>
@@ -327,12 +333,12 @@ function ManualItemRow({ onAdd }) {
                 <label className="form-label">Price (₹)</label>
                 <input className="form-input" type="number" min="0" step="0.50" placeholder="0.00" value={price} onChange={e => setPrice(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAdd()} />
               </div>
-              <div style={{ width: 90 }}>
+              <div style={{ width: 84, flexShrink: 0 }}>
                 <label className="form-label">Qty</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <button className="btn btn-secondary btn-sm" style={{ width: 32, padding: 0, flexShrink: 0 }} onClick={() => setQty(q => Math.max(1, q - 1))}>−</button>
-                  <input className="form-input" type="number" min="1" value={qty} onChange={e => setQty(Math.max(1, parseInt(e.target.value) || 1))} style={{ textAlign: 'center', padding: '12px 4px', fontWeight: 700 }} />
-                  <button className="btn btn-secondary btn-sm" style={{ width: 32, padding: 0, flexShrink: 0 }} onClick={() => setQty(q => q + 1)}>+</button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                  <button className="btn btn-secondary btn-sm" style={{ width: 26, padding: 0, flexShrink: 0 }} onClick={() => setQty(q => Math.max(1, q - 1))}>−</button>
+                  <input className="form-input" type="number" min="1" value={qty} onChange={e => setQty(Math.max(1, parseInt(e.target.value) || 1))} style={{ width: 30, minWidth: 0, textAlign: 'center', padding: '12px 2px', fontWeight: 700, boxSizing: 'border-box' }} />
+                  <button className="btn btn-secondary btn-sm" style={{ width: 26, padding: 0, flexShrink: 0 }} onClick={() => setQty(q => q + 1)}>+</button>
                 </div>
               </div>
             </div>
@@ -368,6 +374,50 @@ export default function ScanPage() {
 
   const itemsCacheRef = useRef(null)
   const [cacheReady, setCacheReady] = useState(false)
+
+  // ── Guard against losing an in-progress bill ──
+  // Any step past 'start' with items in the cart (or mid-scan) counts as
+  // "work in progress". If the user hits the hardware/browser back button,
+  // we intercept it and ask for confirmation instead of silently discarding.
+  const hasUnsavedWork = step !== 'start' && (cart.length > 0 || step === 'result')
+  const hasUnsavedWorkRef = useRef(hasUnsavedWork)
+  useEffect(() => { hasUnsavedWorkRef.current = hasUnsavedWork }, [hasUnsavedWork])
+
+  useEffect(() => {
+    // Push a sentinel history entry so the first "back" press is caught by us.
+    window.history.pushState({ scanGuard: true }, '')
+
+    const handlePopState = () => {
+      if (hasUnsavedWorkRef.current) {
+        const confirmLeave = window.confirm(
+          'Discard this bill? All scanned items will be lost.'
+        )
+        if (confirmLeave) {
+          navigate('/dashboard')
+        } else {
+          // Stay put — re-push the sentinel so back is caught again.
+          window.history.pushState({ scanGuard: true }, '')
+        }
+      } else {
+        navigate('/dashboard')
+      }
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [navigate])
+
+  // Also warn on tab close / refresh while work is in progress.
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (hasUnsavedWorkRef.current) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [])
 
   useEffect(() => {
     if (step !== 'scanning') return
@@ -452,7 +502,11 @@ export default function ScanPage() {
     }))
     const { error: itemsErr } = await supabase.from('bill_items').insert(billItems)
     if (itemsErr) toast('Bill created but items failed to save', 'error')
-    else { toast(`Bill submitted for ${customerName}!`); navigate('/dashboard') }
+    else {
+      hasUnsavedWorkRef.current = false // submitted successfully — safe to leave
+      toast(`Bill submitted for ${customerName}!`)
+      navigate('/dashboard')
+    }
     setSubmitting(false)
   }
 
