@@ -249,25 +249,19 @@ export default function ScanPage() {
   const [notFound, setNotFound]       = useState(false)
   const [processing, setProcessing]   = useState(false) // lookup in progress
 
-  // ── Fetch ALL items fresh every time scanning starts ─────────
-  // Guarantees new items are always available — no stale cache.
-  // One fetch per scanning session (not per scan), so still fast.
+  // ── Preload ALL items into memory on mount ────────────────────
+  // Lookup becomes instant (no network call per scan)
   const itemsCacheRef = useRef(null)
-  const [cacheReady, setCacheReady] = useState(false)
-
   useEffect(() => {
-    if (step !== 'scanning') return
-    setCacheReady(false)
     supabase.from('items').select('*').then(({ data }) => {
       const map = {}
       if (data) data.forEach(item => { map[item.barcode] = item })
       itemsCacheRef.current = map
-      setCacheReady(true)
     })
-  }, [step])
+  }, [])
 
   const videoRef    = useRef(null)
-  const scanActive  = step === 'scanning' && cacheReady  // only scan after items loaded
+  const scanActive  = step === 'scanning'
   const notFoundRef = useRef(false)
 
   // Handle a detected barcode code
@@ -427,13 +421,7 @@ export default function ScanPage() {
             Point camera at barcode
           </p>
 
-          {!cacheReady ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: 32 }}>
-              <div style={{ width: 36, height: 36, border: '3px solid rgba(255,255,255,0.15)', borderTopColor: 'var(--teal)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem' }}>Loading items…</div>
-              <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-            </div>
-          ) : cameraError ? (
+          {cameraError ? (
             <div style={{ background: '#3b1a1a', border: '1px solid var(--danger)', borderRadius: 'var(--radius)', padding: '20px', color: '#fca5a5', textAlign: 'center', maxWidth: 400, width: '100%' }}>
               <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>📵</div>
               <div>{cameraError}</div>
