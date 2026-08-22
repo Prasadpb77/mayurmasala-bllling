@@ -74,18 +74,20 @@ export default async function handler(req, res) {
   }
   rows.push(text(SOLID))
 
-  rows.push(text('# Item         Qty    Amt', { bold: 1, format: 0 }))
-  rows.push(text('------------------------', { format: 0 }))
+  rows.push(text('# Item       Qty  Rate    Amt', { bold: 1, format: 0 }))
+  rows.push(text('------------------------------', { format: 0 }))
 
   let subtotal = 0
   ;(items || []).forEach((item, i) => {
-    const amt  = Number(item.item_price) * Number(item.quantity)
+    const rate = Number(item.item_price)
+    const amt  = rate * Number(item.quantity)
     subtotal  += amt
-    const num  = pad(i + 1, 1)
-    const name = pad(item.item_name, 12)
-    const qty  = pad(item.quantity,   3, true)
-    const amtS = pad(amt.toFixed(2),  7, true)
-    rows.push(text(`${num} ${name} ${qty} ${amtS}`, { format: 0 }))
+    const num   = pad(i + 1, 1)
+    const name  = pad(item.item_name, 10)
+    const qty   = pad(item.quantity,   3, true)
+    const rateS = pad(rate.toFixed(2), 6, true)
+    const amtS  = pad(amt.toFixed(2),  7, true)
+    rows.push(text(`${num} ${name} ${qty} ${rateS} ${amtS}`, { format: 0 }))
   })
 
   rows.push(text(SOLID))
