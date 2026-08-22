@@ -93,13 +93,19 @@ function useCameraStream(videoRef, enabled) {
   }, [enabled])
 }
 
-// ── Manual add — dark themed for scanner screen ───────────────────
-function ManualItemScanRow({ onAdd }) {
-  const [open, setOpen]   = useState(false)
+// ── Manual add bottom-sheet modal ────────────────────────────────
+function ManualAddModal({ onAdd, onClose }) {
   const [name, setName]   = useState('')
   const [price, setPrice] = useState('')
   const [qty, setQty]     = useState(1)
   const toast = useToast()
+  const nameRef = useRef(null)
+
+  useEffect(() => {
+    // Small delay to let the modal animate in before focusing
+    const t = setTimeout(() => nameRef.current?.focus(), 80)
+    return () => clearTimeout(t)
+  }, [])
 
   const handleAdd = () => {
     if (!name.trim()) return toast('Enter item name', 'error')
@@ -107,109 +113,179 @@ function ManualItemScanRow({ onAdd }) {
     if (!price || isNaN(p) || p <= 0) return toast('Enter a valid price', 'error')
     onAdd({ name: name.trim(), price: p, qty })
     toast(`"${name.trim()}" added`)
-    setName(''); setPrice(''); setQty(1); setOpen(false)
+    onClose()
   }
 
+  const subtotal = name && price && !isNaN(parseFloat(price))
+    ? (parseFloat(price) * qty).toFixed(2)
+    : null
+
   return (
-    <div>
-      {/* Toggle bar */}
-      <button
-        onClick={() => setOpen(o => !o)}
+    <>
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
         style={{
-          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '11px 14px', background: 'none', border: 'none', cursor: 'pointer',
-          fontFamily: 'inherit',
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)',
+          zIndex: 200, backdropFilter: 'blur(2px)',
         }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: '1rem' }}>✏️</span>
-          <span style={{ fontWeight: 600, fontSize: '0.85rem', color: 'rgba(255,255,255,0.8)' }}>
-            Add item manually
-          </span>
+      />
+      {/* Sheet */}
+      <div style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0,
+        background: '#1a1f2e',
+        borderTop: '1px solid rgba(255,255,255,0.1)',
+        borderRadius: '18px 18px 0 0',
+        padding: '0 0 calc(env(safe-area-inset-bottom, 0px) + 24px)',
+        zIndex: 201,
+        animation: 'slideUp 0.22s cubic-bezier(0.32,0.72,0,1)',
+      }}>
+        <style>{`
+          @keyframes slideUp {
+            from { transform: translateY(100%); opacity: 0; }
+            to   { transform: translateY(0);    opacity: 1; }
+          }
+        `}</style>
+
+        {/* Handle + header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px 10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: '1rem' }}>✏️</span>
+            <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'rgba(255,255,255,0.9)' }}>
+              Add item manually
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              width: 28, height: 28, borderRadius: '50%',
+              background: 'rgba(255,255,255,0.1)', border: 'none',
+              color: 'rgba(255,255,255,0.5)', cursor: 'pointer',
+              fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >×</button>
         </div>
-        <span style={{
-          color: 'rgba(255,255,255,0.4)', fontSize: '0.9rem',
-          transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s',
-          display: 'inline-block',
-        }}>▾</span>
-      </button>
 
-      {/* Expandable form */}
-      {open && (
-        <div style={{ padding: '0 14px 14px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-          <div style={{ paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '0 0 16px' }} />
 
-            {/* Name */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>
-                Item Name
+        <div style={{ padding: '0 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Name */}
+          <div>
+            <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 600, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>
+              Item Name
+            </label>
+            <input
+              ref={nameRef}
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                padding: '11px 13px',
+                background: 'rgba(255,255,255,0.07)',
+                border: '1.5px solid rgba(255,255,255,0.12)',
+                borderRadius: 10, color: '#fff',
+                fontSize: '0.95rem', fontFamily: 'inherit', outline: 'none',
+              }}
+              placeholder="e.g. Loose Haldi 100g"
+              value={name}
+              onChange={e => setName(e.target.value)}
+            />
+          </div>
+
+          {/* Price + Qty */}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 600, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>
+                Price (₹)
               </label>
               <input
-                style={{ width: '100%', padding: '10px 12px', background: 'rgba(255,255,255,0.08)', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: 'var(--radius-sm)', color: 'var(--white)', fontSize: '0.95rem', fontFamily: 'inherit', outline: 'none' }}
-                placeholder="e.g. Loose Haldi 100g"
-                value={name}
-                autoFocus
-                onChange={e => setName(e.target.value)}
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  padding: '11px 13px',
+                  background: 'rgba(255,255,255,0.07)',
+                  border: '1.5px solid rgba(255,255,255,0.12)',
+                  borderRadius: 10, color: '#fff',
+                  fontSize: '0.95rem', fontFamily: 'inherit', outline: 'none',
+                }}
+                type="number" min="0" step="0.50" placeholder="0.00"
+                value={price}
+                onChange={e => setPrice(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleAdd()}
               />
             </div>
 
-            {/* Price + Qty row */}
-            <div style={{ display: 'flex', gap: 10 }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>
-                  Price (₹)
-                </label>
+            <div style={{ width: 110 }}>
+              <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 600, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>
+                Qty
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <button
+                  style={{
+                    width: 34, height: 42, flexShrink: 0,
+                    border: '1.5px solid rgba(255,255,255,0.15)',
+                    borderRadius: 8, background: 'rgba(255,255,255,0.07)',
+                    color: '#fff', cursor: 'pointer', fontSize: '1.2rem',
+                  }}
+                  onClick={() => setQty(q => Math.max(1, q - 1))}
+                >−</button>
                 <input
-                  style={{ width: '100%', padding: '10px 12px', background: 'rgba(255,255,255,0.08)', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: 'var(--radius-sm)', color: 'var(--white)', fontSize: '0.95rem', fontFamily: 'inherit', outline: 'none' }}
-                  type="number" min="0" step="0.50" placeholder="0.00"
-                  value={price}
-                  onChange={e => setPrice(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleAdd()}
+                  style={{
+                    flex: 1, padding: '11px 4px',
+                    background: 'rgba(255,255,255,0.07)',
+                    border: '1.5px solid rgba(255,255,255,0.12)',
+                    borderRadius: 8, color: '#fff',
+                    fontSize: '0.9rem', fontFamily: 'JetBrains Mono, monospace',
+                    fontWeight: 700, textAlign: 'center', outline: 'none',
+                  }}
+                  type="number" min="1"
+                  value={qty}
+                  onChange={e => setQty(Math.max(1, parseInt(e.target.value) || 1))}
                 />
-              </div>
-              <div style={{ width: 100 }}>
-                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>
-                  Qty
-                </label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <button
-                    style={{ width: 32, height: 38, border: '1.5px solid rgba(255,255,255,0.15)', borderRadius: 'var(--radius-sm)', background: 'rgba(255,255,255,0.07)', color: 'var(--white)', cursor: 'pointer', fontSize: '1.1rem', flexShrink: 0 }}
-                    onClick={() => setQty(q => Math.max(1, q - 1))}
-                  >−</button>
-                  <input
-                    style={{ flex: 1, padding: '10px 4px', background: 'rgba(255,255,255,0.08)', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: 'var(--radius-sm)', color: 'var(--white)', fontSize: '0.9rem', fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, textAlign: 'center', outline: 'none' }}
-                    type="number" min="1"
-                    value={qty}
-                    onChange={e => setQty(Math.max(1, parseInt(e.target.value) || 1))}
-                  />
-                  <button
-                    style={{ width: 32, height: 38, border: '1.5px solid rgba(255,255,255,0.15)', borderRadius: 'var(--radius-sm)', background: 'rgba(255,255,255,0.07)', color: 'var(--white)', cursor: 'pointer', fontSize: '1.1rem', flexShrink: 0 }}
-                    onClick={() => setQty(q => q + 1)}
-                  >+</button>
-                </div>
+                <button
+                  style={{
+                    width: 34, height: 42, flexShrink: 0,
+                    border: '1.5px solid rgba(255,255,255,0.15)',
+                    borderRadius: 8, background: 'rgba(255,255,255,0.07)',
+                    color: '#fff', cursor: 'pointer', fontSize: '1.2rem',
+                  }}
+                  onClick={() => setQty(q => q + 1)}
+                >+</button>
               </div>
             </div>
-
-            {/* Live preview */}
-            {name && price && !isNaN(parseFloat(price)) && (
-              <div style={{ background: 'rgba(0,201,167,0.1)', border: '1px solid rgba(0,201,167,0.2)', borderRadius: 'var(--radius-sm)', padding: '7px 12px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', color: 'rgba(255,255,255,0.7)' }}>
-                <span>{name} × {qty}</span>
-                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: 'var(--teal)' }}>
-                  ₹{(parseFloat(price) * qty).toFixed(2)}
-                </span>
-              </div>
-            )}
-
-            <button
-              style={{ width: '100%', padding: '11px', background: 'var(--teal)', color: 'var(--ink)', border: 'none', borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer' }}
-              onClick={handleAdd}
-            >
-              + Add to Bill
-            </button>
           </div>
+
+          {/* Live preview */}
+          {subtotal && (
+            <div style={{
+              background: 'rgba(0,201,167,0.08)',
+              border: '1px solid rgba(0,201,167,0.18)',
+              borderRadius: 8, padding: '8px 12px',
+              fontSize: '0.82rem', display: 'flex',
+              justifyContent: 'space-between',
+              color: 'rgba(255,255,255,0.6)',
+            }}>
+              <span>{name} × {qty}</span>
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: 'var(--teal, #00c9a7)' }}>
+                ₹{subtotal}
+              </span>
+            </div>
+          )}
+
+          <button
+            style={{
+              width: '100%', padding: '13px',
+              background: 'var(--teal, #00c9a7)',
+              color: 'var(--ink, #0f1117)',
+              border: 'none', borderRadius: 10,
+              fontFamily: 'inherit', fontWeight: 700,
+              fontSize: '0.95rem', cursor: 'pointer',
+              marginTop: 2,
+            }}
+            onClick={handleAdd}
+          >
+            + Add to Bill
+          </button>
         </div>
-      )}
-    </div>
+      </div>
+    </>
   )
 }
 
@@ -288,6 +364,7 @@ export default function ScanPage() {
   const [cameraError, setCameraError]   = useState('')
   const [notFound, setNotFound]         = useState(false)
   const [processing, setProcessing]     = useState(false)
+  const [showManualModal, setShowManualModal] = useState(false)
 
   const itemsCacheRef = useRef(null)
   const [cacheReady, setCacheReady] = useState(false)
@@ -324,9 +401,8 @@ export default function ScanPage() {
   }, [processing, toast])
 
   useCameraStream(videoRef, scanActive)
-  useBarcodeScanner(videoRef, handleDetected, scanActive && !processing)
+  useBarcodeScanner(videoRef, handleDetected, scanActive && !processing && !showManualModal)
 
-  // Shared manual add handler — used in both scanning and overview steps
   const handleManualAdd = useCallback((item) => {
     setCart(prev => {
       const key = `manual-${item.name.toLowerCase().trim()}`
@@ -418,74 +494,196 @@ export default function ScanPage() {
 
   // ─── Step: Scanning ────────────────────────────────
   if (step === 'scanning') {
-
     return (
       <div className="scanner-shell">
-        <div className="scanner-nav">
-          <div>
-            <div className="scanner-title">📷 Scanning</div>
-            <div className="scanner-subtitle">{customerName} · {cartCount} item{cartCount !== 1 ? 's' : ''} · ₹{cartTotal.toFixed(2)}</div>
+        {/* ── Compact top nav ── */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '10px 12px',
+          background: 'rgba(0,0,0,0.5)',
+          backdropFilter: 'blur(8px)',
+          borderBottom: '1px solid rgba(255,255,255,0.07)',
+          flexShrink: 0,
+          gap: 8,
+        }}>
+          {/* Left: customer + counter */}
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ color: 'rgba(255,255,255,0.9)', fontWeight: 700, fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {customerName}
+            </div>
+            <div style={{ color: 'var(--teal, #00c9a7)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.78rem', fontWeight: 600 }}>
+              {cartCount > 0 ? `${cartCount} item${cartCount !== 1 ? 's' : ''} · ₹${cartTotal.toFixed(2)}` : 'No items yet'}
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <ManualAddButton onAdd={handleManualAdd} />
-            <button className="btn btn-primary btn-sm" onClick={handleDone} disabled={cart.length === 0}>
-              Done ({cartCount})
+
+          {/* Right: manual + done */}
+          <div style={{ display: 'flex', gap: 7, flexShrink: 0, alignItems: 'center' }}>
+            {/* Manual add button */}
+            <button
+              onClick={() => setShowManualModal(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '7px 11px',
+                background: 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                borderRadius: 8,
+                color: 'rgba(255,255,255,0.85)',
+                cursor: 'pointer',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                fontFamily: 'inherit',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <span style={{ fontSize: '0.9rem' }}>✏️</span>
+              <span>Manual</span>
+            </button>
+
+            {/* Done button */}
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={handleDone}
+              disabled={cart.length === 0}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              Done {cartCount > 0 ? `(${cartCount})` : ''}
             </button>
           </div>
         </div>
 
-        <div className="scanner-body" style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem', textAlign: 'center', marginBottom: '8px' }}>
-            Point camera at barcode
-          </p>
-
+        {/* ── Camera area — takes all available space ── */}
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          position: 'relative',
+          overflow: 'hidden',
+          background: '#000',
+        }}>
           {!cacheReady ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: 32 }}>
-              <div style={{ width: 36, height: 36, border: '3px solid rgba(255,255,255,0.15)', borderTopColor: 'var(--teal)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 36, height: 36, border: '3px solid rgba(255,255,255,0.15)', borderTopColor: 'var(--teal, #00c9a7)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
               <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem' }}>Loading items…</div>
               <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
             </div>
           ) : cameraError ? (
-            <div style={{ background: '#3b1a1a', border: '1px solid var(--danger)', borderRadius: 'var(--radius)', padding: '20px', color: '#fca5a5', textAlign: 'center', maxWidth: 400, width: '100%' }}>
+            <div style={{ background: '#3b1a1a', border: '1px solid var(--danger)', borderRadius: 'var(--radius)', padding: '20px', color: '#fca5a5', textAlign: 'center', maxWidth: 340, margin: '0 16px' }}>
               <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>📵</div>
               <div>{cameraError}</div>
-              <button className="btn btn-secondary btn-sm mt-3" onClick={() => { setCameraError(''); setStep('scanning') }}>Try Again</button>
+              <button className="btn btn-secondary btn-sm" style={{ marginTop: 12 }} onClick={() => { setCameraError(''); setStep('scanning') }}>Try Again</button>
             </div>
           ) : (
-            <div className="video-wrapper" style={{ maxWidth: 480, width: '100%', aspectRatio: '1 / 1' }}>
-              <video ref={videoRef} autoPlay playsInline muted />
-              <div className="scan-overlay">
-                <div className="scan-frame"><div className="scan-line" /></div>
-              </div>
-              {notFound && (
-                <div style={{ position: 'absolute', bottom: 12, left: 0, right: 0, textAlign: 'center', color: '#fca5a5', background: 'rgba(239,68,68,0.15)', padding: '8px', fontSize: '0.8rem' }}>
-                  ✕ Barcode not found — try again
-                </div>
-              )}
-            </div>
-          )}
+            <>
+              {/* Video fills the entire space */}
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  display: 'block',
+                }}
+              />
 
-          {/* Mini cart */}
-          {cart.length > 0 && (
-            <div className="scanner-cart">
-              <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>
-                Cart ({cartCount} items)
-              </div>
-              {cart.slice(-4).map(c => (
-                <div key={c.item.barcode} className="cart-item-row">
-                  <span className="cart-item-name">{c.item.name}{String(c.item.barcode).startsWith('manual-') ? ' ✏️' : ''}</span>
-                  <span className="cart-item-qty">×{c.qty}</span>
-                  <span className="cart-item-price">₹{(c.item.price * c.qty).toFixed(2)}</span>
+              {/* Scan frame overlay */}
+              <div style={{
+                position: 'absolute', inset: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                pointerEvents: 'none',
+              }}>
+                {/* Corner-bracket frame */}
+                <div style={{ position: 'relative', width: '72%', maxWidth: 280, aspectRatio: '3/1.4' }}>
+                  {/* Corners */}
+                  {[
+                    { top: 0, left: 0, borderTop: '3px solid #00c9a7', borderLeft: '3px solid #00c9a7' },
+                    { top: 0, right: 0, borderTop: '3px solid #00c9a7', borderRight: '3px solid #00c9a7' },
+                    { bottom: 0, left: 0, borderBottom: '3px solid #00c9a7', borderLeft: '3px solid #00c9a7' },
+                    { bottom: 0, right: 0, borderBottom: '3px solid #00c9a7', borderRight: '3px solid #00c9a7' },
+                  ].map((s, i) => (
+                    <div key={i} style={{ position: 'absolute', width: 22, height: 22, borderRadius: 2, ...s }} />
+                  ))}
+                  {/* Animated scan line */}
+                  <div style={{
+                    position: 'absolute', left: 4, right: 4,
+                    height: 2,
+                    background: 'linear-gradient(90deg, transparent, #00c9a7, transparent)',
+                    animation: 'scanline 1.6s ease-in-out infinite',
+                    boxShadow: '0 0 8px rgba(0,201,167,0.7)',
+                  }} />
+                  <style>{`
+                    @keyframes scanline {
+                      0%   { top: 8px;  opacity: 0; }
+                      10%  { opacity: 1; }
+                      90%  { opacity: 1; }
+                      100% { top: calc(100% - 8px); opacity: 0; }
+                    }
+                  `}</style>
                 </div>
-              ))}
-              {cart.length > 4 && (
-                <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', textAlign: 'center', padding: '4px' }}>
-                  +{cart.length - 4} more items
+              </div>
+
+              {/* Not-found flash */}
+              {notFound && (
+                <div style={{
+                  position: 'absolute', bottom: 0, left: 0, right: 0,
+                  background: 'rgba(239,68,68,0.85)',
+                  color: '#fff', textAlign: 'center',
+                  padding: '10px', fontSize: '0.82rem', fontWeight: 600,
+                }}>
+                  ✕ Barcode not in catalog — try again
                 </div>
               )}
-            </div>
+            </>
           )}
         </div>
+
+        {/* ── Collapsed mini cart strip at bottom ── */}
+        {cart.length > 0 && (
+          <div style={{
+            flexShrink: 0,
+            background: 'rgba(0,0,0,0.7)',
+            backdropFilter: 'blur(8px)',
+            borderTop: '1px solid rgba(255,255,255,0.08)',
+            padding: '8px 12px',
+            maxHeight: 120,
+            overflowY: 'auto',
+          }}>
+            <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 5 }}>
+              Cart — {cartCount} item{cartCount !== 1 ? 's' : ''}
+            </div>
+            {cart.slice(-4).map(c => (
+              <div key={c.item.barcode} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '3px 0',
+              }}>
+                <span style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.8rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {c.item.name}{String(c.item.barcode).startsWith('manual-') ? ' ✏️' : ''}
+                </span>
+                <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', marginLeft: 8 }}>×{c.qty}</span>
+                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '0.8rem', color: 'var(--teal, #00c9a7)', marginLeft: 10, minWidth: 60, textAlign: 'right' }}>
+                  ₹{(c.item.price * c.qty).toFixed(2)}
+                </span>
+              </div>
+            ))}
+            {cart.length > 4 && (
+              <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: '0.72rem', textAlign: 'center', paddingTop: 3 }}>
+                +{cart.length - 4} more
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Manual add modal */}
+        {showManualModal && (
+          <ManualAddModal
+            onAdd={(item) => { handleManualAdd(item) }}
+            onClose={() => setShowManualModal(false)}
+          />
+        )}
       </div>
     )
   }
