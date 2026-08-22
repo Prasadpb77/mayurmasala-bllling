@@ -5,29 +5,23 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/AuthContext'
 
 // ── Barcode scanner hook ──────────────────────────────────────────
-// Uses native BarcodeDetector API (Chrome Android/Desktop) — extremely fast.
-// Falls back to @zxing only if BarcodeDetector unavailable (older browsers).
-// FORMAT: only CODE128 — no wasted cycles on QR/DataMatrix/etc.
 function useBarcodeScanner(videoRef, onDetected, enabled) {
-  const rafRef       = useRef(null)
-  const detectorRef  = useRef(null)
-  const zxingRef     = useRef(null)
-  const lastCodeRef  = useRef(null)
-  const lastTimeRef  = useRef(0)
+  const rafRef      = useRef(null)
+  const detectorRef = useRef(null)
+  const zxingRef    = useRef(null)
+  const lastCodeRef = useRef(null)
+  const lastTimeRef = useRef(0)
 
   useEffect(() => {
     if (!enabled) return
-
     let stopped = false
 
     async function init() {
-      // ── Option A: native BarcodeDetector (fast, no library) ──
       if ('BarcodeDetector' in window) {
         try {
           const supported = await BarcodeDetector.getSupportedFormats()
           const formats   = supported.includes('code_128') ? ['code_128'] : supported
           detectorRef.current = new BarcodeDetector({ formats })
-
           const detect = async () => {
             if (stopped) return
             const video = videoRef.current
@@ -37,7 +31,6 @@ function useBarcodeScanner(videoRef, onDetected, enabled) {
                 if (codes.length > 0) {
                   const code = codes[0].rawValue
                   const now  = Date.now()
-                  // Debounce: ignore same code within 1.5s
                   if (code !== lastCodeRef.current || now - lastTimeRef.current > 1500) {
                     lastCodeRef.current = code
                     lastTimeRef.current = now
@@ -52,13 +45,11 @@ function useBarcodeScanner(videoRef, onDetected, enabled) {
           return
         } catch (_) {}
       }
-
-      // ── Option B: ZXing fallback with CODE128 hint ──
       const { BrowserMultiFormatReader, BarcodeFormat, DecodeHintType } = await import('@zxing/library')
       const hints = new Map()
       hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.CODE_128])
       hints.set(DecodeHintType.TRY_HARDER, false)
-      const reader = new BrowserMultiFormatReader(hints, 150) // 150ms scan interval
+      const reader = new BrowserMultiFormatReader(hints, 150)
       zxingRef.current = reader
       await reader.decodeFromVideoDevice(null, videoRef.current, (result) => {
         if (!result || stopped) return
@@ -71,9 +62,7 @@ function useBarcodeScanner(videoRef, onDetected, enabled) {
         }
       })
     }
-
     init()
-
     return () => {
       stopped = true
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
@@ -83,42 +72,148 @@ function useBarcodeScanner(videoRef, onDetected, enabled) {
 }
 
 // ── Camera stream hook ────────────────────────────────────────────
-// Opens back camera directly — avoids ZXing's slow device enumeration.
 function useCameraStream(videoRef, enabled) {
   const streamRef = useRef(null)
-
   useEffect(() => {
     if (!enabled) return
-
     let active = true
     navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: 'environment' }, // back camera
-        width:      { ideal: 1280 },
-        height:     { ideal: 720 },
-      },
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
       audio: false,
     }).then(stream => {
       if (!active) { stream.getTracks().forEach(t => t.stop()); return }
       streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        videoRef.current.play()
-      }
-    }).catch(err => {
-      console.error('Camera error:', err)
-    })
-
+      if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play() }
+    }).catch(err => console.error('Camera error:', err))
     return () => {
       active = false
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop())
-        streamRef.current = null
-      }
+      if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
       if (videoRef.current) videoRef.current.srcObject = null
     }
   }, [enabled])
 }
+
+// ── Manual add — dark themed for scanner screen ───────────────────
+function ManualItemScanRow({ onAdd }) {
+  const [open, setOpen]   = useState(false)
+  const [name, setName]   = useState('')
+  const [price, setPrice] = useState('')
+  const [qty, setQty]     = useState(1)
+  const toast = useToast()
+
+  const handleAdd = () => {
+    if (!name.trim()) return toast('Enter item name', 'error')
+    const p = parseFloat(price)
+    if (!price || isNaN(p) || p <= 0) return toast('Enter a valid price', 'error')
+    onAdd({ name: name.trim(), price: p, qty })
+    toast(`"${name.trim()}" added`)
+    setName(''); setPrice(''); setQty(1); setOpen(false)
+  }
+
+  return (
+    <div>
+      {/* Toggle bar */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '11px 14px', background: 'none', border: 'none', cursor: 'pointer',
+          fontFamily: 'inherit',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: '1rem' }}>✏️</span>
+          <span style={{ fontWeight: 600, fontSize: '0.85rem', color: 'rgba(255,255,255,0.8)' }}>
+            Add item manually
+          </span>
+        </div>
+        <span style={{
+          color: 'rgba(255,255,255,0.4)', fontSize: '0.9rem',
+          transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s',
+          display: 'inline-block',
+        }}>▾</span>
+      </button>
+
+      {/* Expandable form */}
+      {open && (
+        <div style={{ padding: '0 14px 14px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+          <div style={{ paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+            {/* Name */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>
+                Item Name
+              </label>
+              <input
+                style={{ width: '100%', padding: '10px 12px', background: 'rgba(255,255,255,0.08)', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: 'var(--radius-sm)', color: 'var(--white)', fontSize: '0.95rem', fontFamily: 'inherit', outline: 'none' }}
+                placeholder="e.g. Loose Haldi 100g"
+                value={name}
+                autoFocus
+                onChange={e => setName(e.target.value)}
+              />
+            </div>
+
+            {/* Price + Qty row */}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>
+                  Price (₹)
+                </label>
+                <input
+                  style={{ width: '100%', padding: '10px 12px', background: 'rgba(255,255,255,0.08)', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: 'var(--radius-sm)', color: 'var(--white)', fontSize: '0.95rem', fontFamily: 'inherit', outline: 'none' }}
+                  type="number" min="0" step="0.50" placeholder="0.00"
+                  value={price}
+                  onChange={e => setPrice(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleAdd()}
+                />
+              </div>
+              <div style={{ width: 100 }}>
+                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>
+                  Qty
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <button
+                    style={{ width: 32, height: 38, border: '1.5px solid rgba(255,255,255,0.15)', borderRadius: 'var(--radius-sm)', background: 'rgba(255,255,255,0.07)', color: 'var(--white)', cursor: 'pointer', fontSize: '1.1rem', flexShrink: 0 }}
+                    onClick={() => setQty(q => Math.max(1, q - 1))}
+                  >−</button>
+                  <input
+                    style={{ flex: 1, padding: '10px 4px', background: 'rgba(255,255,255,0.08)', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: 'var(--radius-sm)', color: 'var(--white)', fontSize: '0.9rem', fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, textAlign: 'center', outline: 'none' }}
+                    type="number" min="1"
+                    value={qty}
+                    onChange={e => setQty(Math.max(1, parseInt(e.target.value) || 1))}
+                  />
+                  <button
+                    style={{ width: 32, height: 38, border: '1.5px solid rgba(255,255,255,0.15)', borderRadius: 'var(--radius-sm)', background: 'rgba(255,255,255,0.07)', color: 'var(--white)', cursor: 'pointer', fontSize: '1.1rem', flexShrink: 0 }}
+                    onClick={() => setQty(q => q + 1)}
+                  >+</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Live preview */}
+            {name && price && !isNaN(parseFloat(price)) && (
+              <div style={{ background: 'rgba(0,201,167,0.1)', border: '1px solid rgba(0,201,167,0.2)', borderRadius: 'var(--radius-sm)', padding: '7px 12px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', color: 'rgba(255,255,255,0.7)' }}>
+                <span>{name} × {qty}</span>
+                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: 'var(--teal)' }}>
+                  ₹{(parseFloat(price) * qty).toFixed(2)}
+                </span>
+              </div>
+            )}
+
+            <button
+              style={{ width: '100%', padding: '11px', background: 'var(--teal)', color: 'var(--ink)', border: 'none', borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer' }}
+              onClick={handleAdd}
+            >
+              + Add to Bill
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Light-themed manual row for overview screen ───────────────────
 function ManualItemRow({ onAdd }) {
   const [name, setName]   = useState('')
   const [price, setPrice] = useState('')
@@ -127,7 +222,7 @@ function ManualItemRow({ onAdd }) {
   const toast = useToast()
 
   const handleAdd = () => {
-    if (!name.trim())              return toast('Enter item name', 'error')
+    if (!name.trim()) return toast('Enter item name', 'error')
     const p = parseFloat(price)
     if (!price || isNaN(p) || p <= 0) return toast('Enter a valid price', 'error')
     onAdd({ name: name.trim(), price: p, qty })
@@ -136,97 +231,42 @@ function ManualItemRow({ onAdd }) {
   }
 
   return (
-    <div style={{
-      background: 'var(--white)',
-      border: '1.5px solid var(--border)',
-      borderRadius: 'var(--radius)',
-      overflow: 'hidden',
-    }}>
-      {/* Toggle header */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '13px 16px', background: 'none', border: 'none', cursor: 'pointer',
-          fontFamily: 'inherit',
-        }}
-      >
+    <div style={{ background: 'var(--white)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+      <button onClick={() => setOpen(o => !o)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: '1.1rem' }}>✏️</span>
           <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--ink)' }}>Add item manually</span>
         </div>
-        <span style={{ color: 'var(--text-muted)', fontSize: '1.1rem', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
-          ▾
-        </span>
+        <span style={{ color: 'var(--text-muted)', fontSize: '1.1rem', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', display: 'inline-block' }}>▾</span>
       </button>
-
-      {/* Expandable form */}
       {open && (
         <div style={{ padding: '0 14px 16px', borderTop: '1px solid var(--border)' }}>
           <div style={{ paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-
-            {/* Name */}
             <div>
               <label className="form-label">Item Name</label>
-              <input
-                className="form-input"
-                placeholder="e.g. Loose Haldi 100g"
-                value={name}
-                autoFocus
-                onChange={e => setName(e.target.value)}
-              />
+              <input className="form-input" placeholder="e.g. Loose Haldi 100g" value={name} autoFocus onChange={e => setName(e.target.value)} />
             </div>
-
-            {/* Price + Qty in a row */}
             <div style={{ display: 'flex', gap: 10 }}>
               <div style={{ flex: 1 }}>
                 <label className="form-label">Price (₹)</label>
-                <input
-                  className="form-input"
-                  type="number" min="0" step="0.50"
-                  placeholder="0.00"
-                  value={price}
-                  onChange={e => setPrice(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleAdd()}
-                />
+                <input className="form-input" type="number" min="0" step="0.50" placeholder="0.00" value={price} onChange={e => setPrice(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAdd()} />
               </div>
               <div style={{ width: 90 }}>
                 <label className="form-label">Qty</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    style={{ width: 32, padding: 0, flexShrink: 0 }}
-                    onClick={() => setQty(q => Math.max(1, q - 1))}
-                  >−</button>
-                  <input
-                    className="form-input"
-                    type="number" min="1"
-                    value={qty}
-                    onChange={e => setQty(Math.max(1, parseInt(e.target.value) || 1))}
-                    style={{ textAlign: 'center', padding: '12px 4px', fontWeight: 700 }}
-                  />
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    style={{ width: 32, padding: 0, flexShrink: 0 }}
-                    onClick={() => setQty(q => q + 1)}
-                  >+</button>
+                  <button className="btn btn-secondary btn-sm" style={{ width: 32, padding: 0, flexShrink: 0 }} onClick={() => setQty(q => Math.max(1, q - 1))}>−</button>
+                  <input className="form-input" type="number" min="1" value={qty} onChange={e => setQty(Math.max(1, parseInt(e.target.value) || 1))} style={{ textAlign: 'center', padding: '12px 4px', fontWeight: 700 }} />
+                  <button className="btn btn-secondary btn-sm" style={{ width: 32, padding: 0, flexShrink: 0 }} onClick={() => setQty(q => q + 1)}>+</button>
                 </div>
               </div>
             </div>
-
-            {/* Preview */}
             {name && price && !isNaN(parseFloat(price)) && (
               <div style={{ background: 'var(--paper)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
                 <span>{name} × {qty}</span>
-                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: 'var(--ink)' }}>
-                  ₹{(parseFloat(price) * qty).toFixed(2)}
-                </span>
+                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: 'var(--ink)' }}>₹{(parseFloat(price) * qty).toFixed(2)}</span>
               </div>
             )}
-
-            <button className="btn btn-primary btn-full" onClick={handleAdd}>
-              + Add to Bill
-            </button>
+            <button className="btn btn-primary btn-full" onClick={handleAdd}>+ Add to Bill</button>
           </div>
         </div>
       )}
@@ -240,57 +280,61 @@ export default function ScanPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
 
-  const [step, setStep]               = useState('start')
+  const [step, setStep]                 = useState('start')
   const [customerName, setCustomerName] = useState('')
-  const [cart, setCart]               = useState([])
-  const [scannedItem, setScannedItem] = useState(null)
-  const [submitting, setSubmitting]   = useState(false)
-  const [cameraError, setCameraError] = useState('')
-  const [notFound, setNotFound]       = useState(false)
-  const [processing, setProcessing]   = useState(false) // lookup in progress
+  const [cart, setCart]                 = useState([])
+  const [scannedItem, setScannedItem]   = useState(null)
+  const [submitting, setSubmitting]     = useState(false)
+  const [cameraError, setCameraError]   = useState('')
+  const [notFound, setNotFound]         = useState(false)
+  const [processing, setProcessing]     = useState(false)
 
-  // ── Preload ALL items into memory on mount ────────────────────
-  // Lookup becomes instant (no network call per scan)
   const itemsCacheRef = useRef(null)
+  const [cacheReady, setCacheReady] = useState(false)
+
   useEffect(() => {
+    if (step !== 'scanning') return
+    setCacheReady(false)
     supabase.from('items').select('*').then(({ data }) => {
       const map = {}
       if (data) data.forEach(item => { map[item.barcode] = item })
       itemsCacheRef.current = map
+      setCacheReady(true)
     })
-  }, [])
+  }, [step])
 
-  const videoRef    = useRef(null)
-  const scanActive  = step === 'scanning'
+  const videoRef   = useRef(null)
+  const scanActive = step === 'scanning' && cacheReady
   const notFoundRef = useRef(false)
 
-  // Handle a detected barcode code
   const handleDetected = useCallback((code) => {
     if (processing || notFoundRef.current) return
-
     const cache = itemsCacheRef.current
-    if (!cache) return // still loading
-
+    if (!cache) return
     const item = cache[code]
     if (!item) {
       notFoundRef.current = true
       setNotFound(true)
       toast(`"${code}" not found`, 'error')
-      setTimeout(() => {
-        notFoundRef.current = false
-        setNotFound(false)
-      }, 1500)
+      setTimeout(() => { notFoundRef.current = false; setNotFound(false) }, 1500)
       return
     }
-
-    // Found instantly — no network call
     setScannedItem(item)
     setStep('result')
   }, [processing, toast])
 
-  // Start camera + scanner only when scanning step is active
   useCameraStream(videoRef, scanActive)
   useBarcodeScanner(videoRef, handleDetected, scanActive && !processing)
+
+  // Shared manual add handler — used in both scanning and overview steps
+  const handleManualAdd = useCallback((item) => {
+    setCart(prev => {
+      const key = `manual-${item.name.toLowerCase().trim()}`
+      const existing = prev.find(c => c.item.barcode === key)
+      if (existing) return prev.map(c => c.item.barcode === key ? { ...c, qty: c.qty + item.qty } : c)
+      return [...prev, { item: { ...item, barcode: key, id: key }, qty: item.qty }]
+    })
+  }, [])
 
   const handleNext = () => {
     setCart(prev => {
@@ -302,12 +346,8 @@ export default function ScanPage() {
     setStep('scanning')
   }
 
-  const handleRetake = () => {
-    setScannedItem(null)
-    setStep('scanning')
-  }
-
-  const handleDone = () => setStep('overview')
+  const handleRetake = () => { setScannedItem(null); setStep('scanning') }
+  const handleDone   = () => setStep('overview')
 
   const handleRemoveCartItem = (barcode) => {
     setCart(prev => {
@@ -322,14 +362,11 @@ export default function ScanPage() {
     if (cart.length === 0) return toast('Cart is empty', 'error')
     setSubmitting(true)
     const total = cart.reduce((sum, c) => sum + c.item.price * c.qty, 0)
-
     const { data: bill, error: billErr } = await supabase
       .from('bills')
       .insert({ customer_name: customerName.trim(), total_amount: total, status: 'pending', created_by: user?.email ?? '' })
       .select().single()
-
     if (billErr) { toast('Failed to create bill', 'error'); setSubmitting(false); return }
-
     const billItems = cart.map(c => ({
       bill_id:    bill.id,
       item_id:    String(c.item.id).startsWith('manual-') ? null : c.item.id,
@@ -337,7 +374,6 @@ export default function ScanPage() {
       item_price: c.item.price,
       quantity:   c.qty,
     }))
-
     const { error: itemsErr } = await supabase.from('bill_items').insert(billItems)
     if (itemsErr) toast('Bill created but items failed to save', 'error')
     else { toast(`Bill submitted for ${customerName}!`); navigate('/dashboard') }
@@ -350,23 +386,12 @@ export default function ScanPage() {
   // ─── Step: Start ───────────────────────────────────
   if (step === 'start') {
     return (
-      <div style={{
-        minHeight: '100vh',
-        background: 'var(--ink)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '24px',
-      }}>
+      <div style={{ minHeight: '100vh', background: 'var(--ink)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
           <div style={{ fontSize: '3.5rem', marginBottom: '12px' }}>🧾</div>
           <h1 style={{ color: 'var(--white)', fontSize: '1.75rem', fontWeight: 700 }}>New Bill</h1>
-          <p style={{ color: 'rgba(255,255,255,0.5)', marginTop: '6px', fontSize: '0.9rem' }}>
-            Enter customer name to start scanning
-          </p>
+          <p style={{ color: 'rgba(255,255,255,0.5)', marginTop: '6px', fontSize: '0.9rem' }}>Enter customer name to start scanning</p>
         </div>
-
         <div style={{ width: '100%', maxWidth: '360px' }}>
           <div className="form-group">
             <label className="form-label" style={{ color: 'rgba(255,255,255,0.5)' }}>Customer Name</label>
@@ -380,21 +405,10 @@ export default function ScanPage() {
               onKeyDown={e => e.key === 'Enter' && customerName.trim() && setStep('scanning')}
             />
           </div>
-
-          <button
-            className="btn btn-primary btn-full btn-lg"
-            style={{ marginTop: '8px' }}
-            disabled={!customerName.trim()}
-            onClick={() => setStep('scanning')}
-          >
+          <button className="btn btn-primary btn-full btn-lg" style={{ marginTop: '8px' }} disabled={!customerName.trim()} onClick={() => setStep('scanning')}>
             Start Scanning →
           </button>
-
-          <button
-            className="btn btn-ghost btn-full"
-            style={{ marginTop: '10px', color: 'rgba(255,255,255,0.4)', borderColor: 'rgba(255,255,255,0.1)' }}
-            onClick={() => navigate('/')}
-          >
+          <button className="btn btn-ghost btn-full" style={{ marginTop: '10px', color: 'rgba(255,255,255,0.4)', borderColor: 'rgba(255,255,255,0.1)' }} onClick={() => navigate('/')}>
             ← Back to Home
           </button>
         </div>
@@ -404,6 +418,7 @@ export default function ScanPage() {
 
   // ─── Step: Scanning ────────────────────────────────
   if (step === 'scanning') {
+
     return (
       <div className="scanner-shell">
         <div className="scanner-nav">
@@ -411,31 +426,36 @@ export default function ScanPage() {
             <div className="scanner-title">📷 Scanning</div>
             <div className="scanner-subtitle">{customerName} · {cartCount} item{cartCount !== 1 ? 's' : ''} · ₹{cartTotal.toFixed(2)}</div>
           </div>
-          <button className="btn btn-primary btn-sm" onClick={handleDone} disabled={cart.length === 0}>
-            Done ({cartCount})
-          </button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <ManualAddButton onAdd={handleManualAdd} />
+            <button className="btn btn-primary btn-sm" onClick={handleDone} disabled={cart.length === 0}>
+              Done ({cartCount})
+            </button>
+          </div>
         </div>
 
-        <div className="scanner-body">
-          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem', textAlign: 'center', marginBottom: '12px' }}>
+        <div className="scanner-body" style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem', textAlign: 'center', marginBottom: '8px' }}>
             Point camera at barcode
           </p>
 
-          {cameraError ? (
+          {!cacheReady ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: 32 }}>
+              <div style={{ width: 36, height: 36, border: '3px solid rgba(255,255,255,0.15)', borderTopColor: 'var(--teal)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem' }}>Loading items…</div>
+              <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+            </div>
+          ) : cameraError ? (
             <div style={{ background: '#3b1a1a', border: '1px solid var(--danger)', borderRadius: 'var(--radius)', padding: '20px', color: '#fca5a5', textAlign: 'center', maxWidth: 400, width: '100%' }}>
               <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>📵</div>
               <div>{cameraError}</div>
-              <button className="btn btn-secondary btn-sm mt-3" onClick={() => { setCameraError(''); setStep('scanning') }}>
-                Try Again
-              </button>
+              <button className="btn btn-secondary btn-sm mt-3" onClick={() => { setCameraError(''); setStep('scanning') }}>Try Again</button>
             </div>
           ) : (
-            <div className="video-wrapper">
+            <div className="video-wrapper" style={{ maxWidth: 480, width: '100%', aspectRatio: '1 / 1' }}>
               <video ref={videoRef} autoPlay playsInline muted />
               <div className="scan-overlay">
-                <div className="scan-frame">
-                  <div className="scan-line" />
-                </div>
+                <div className="scan-frame"><div className="scan-line" /></div>
               </div>
               {notFound && (
                 <div style={{ position: 'absolute', bottom: 12, left: 0, right: 0, textAlign: 'center', color: '#fca5a5', background: 'rgba(239,68,68,0.15)', padding: '8px', fontSize: '0.8rem' }}>
@@ -453,7 +473,7 @@ export default function ScanPage() {
               </div>
               {cart.slice(-4).map(c => (
                 <div key={c.item.barcode} className="cart-item-row">
-                  <span className="cart-item-name">{c.item.name}</span>
+                  <span className="cart-item-name">{c.item.name}{String(c.item.barcode).startsWith('manual-') ? ' ✏️' : ''}</span>
                   <span className="cart-item-qty">×{c.qty}</span>
                   <span className="cart-item-price">₹{(c.item.price * c.qty).toFixed(2)}</span>
                 </div>
@@ -479,45 +499,26 @@ export default function ScanPage() {
             <div className="scanner-title">✅ Item Found</div>
             <div className="scanner-subtitle">{customerName} · {cartCount} item{cartCount !== 1 ? 's' : ''} in cart</div>
           </div>
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={handleDone}
-            disabled={cart.length === 0}
-          >
-            Done
-          </button>
+          <button className="btn btn-primary btn-sm" onClick={handleDone} disabled={cart.length === 0}>Done</button>
         </div>
-
         <div className="scanner-body" style={{ justifyContent: 'center', gap: '16px' }}>
-          <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem', textAlign: 'center' }}>
-            Scanned item
-          </div>
-
+          <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem', textAlign: 'center' }}>Scanned item</div>
           <div className="result-card">
             <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🏷️</div>
             <div className="result-item-name">{scannedItem?.name}</div>
             <div className="result-item-price">₹{Number(scannedItem?.price).toFixed(2)}</div>
             <div className="result-barcode">{scannedItem?.barcode}</div>
           </div>
-
           <div className="scan-actions">
-            <button className="btn btn-ghost btn-full btn-lg" style={{ color: 'rgba(255,255,255,0.7)', borderColor: 'rgba(255,255,255,0.2)' }} onClick={handleRetake}>
-              🔄 Retake
-            </button>
-            <button className="btn btn-primary btn-full btn-lg" onClick={handleNext}>
-              ✓ Next →
-            </button>
+            <button className="btn btn-ghost btn-full btn-lg" style={{ color: 'rgba(255,255,255,0.7)', borderColor: 'rgba(255,255,255,0.2)' }} onClick={handleRetake}>🔄 Retake</button>
+            <button className="btn btn-primary btn-full btn-lg" onClick={handleNext}>✓ Next →</button>
           </div>
-
           <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', textAlign: 'center' }}>
             <strong>Next</strong> adds item · <strong>Retake</strong> discards · <strong>Done</strong> to review
           </div>
-
           {cart.length > 0 && (
             <div className="scanner-cart" style={{ marginTop: '8px' }}>
-              <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>
-                Cart so far
-              </div>
+              <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Cart so far</div>
               {cart.slice(-3).map(c => (
                 <div key={c.item.barcode} className="cart-item-row">
                   <span className="cart-item-name">{c.item.name}</span>
@@ -525,11 +526,7 @@ export default function ScanPage() {
                   <span className="cart-item-price">₹{(c.item.price * c.qty).toFixed(2)}</span>
                 </div>
               ))}
-              {cart.length > 3 && (
-                <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', textAlign: 'center', padding: '4px' }}>
-                  +{cart.length - 3} more
-                </div>
-              )}
+              {cart.length > 3 && <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', textAlign: 'center', padding: '4px' }}>+{cart.length - 3} more</div>}
             </div>
           )}
         </div>
@@ -541,36 +538,16 @@ export default function ScanPage() {
   if (step === 'overview') {
     return (
       <div style={{ minHeight: '100dvh', background: 'var(--paper)' }}>
-
-        {/* Dark header */}
-        <div style={{
-          background: 'var(--ink)',
-          padding: `calc(20px + var(--sat, 0px)) 20px 20px`,
-          textAlign: 'center',
-        }}>
+        <div style={{ background: 'var(--ink)', padding: `calc(20px + var(--sat, 0px)) 20px 20px`, textAlign: 'center' }}>
           <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Customer</div>
           <div style={{ color: 'var(--white)', fontSize: '1.5rem', fontWeight: 700, marginTop: 4 }}>{customerName}</div>
-          <div style={{ color: 'var(--teal)', fontSize: '2.2rem', fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', marginTop: 6 }}>
-            ₹{cartTotal.toFixed(2)}
-          </div>
+          <div style={{ color: 'var(--teal)', fontSize: '2.2rem', fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', marginTop: 6 }}>₹{cartTotal.toFixed(2)}</div>
           <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.825rem', marginTop: 4 }}>
             {cartCount} item{cartCount !== 1 ? 's' : ''} · {cart.length} product{cart.length !== 1 ? 's' : ''}
           </div>
         </div>
-
         <div style={{ padding: '16px', maxWidth: 520, margin: '0 auto' }}>
-
-          {/* ── Manual item add card ── */}
-          <ManualItemRow onAdd={(item) => {
-            setCart(prev => {
-              const key = `manual-${item.name.toLowerCase().trim()}`
-              const existing = prev.find(c => c.item.barcode === key)
-              if (existing) return prev.map(c => c.item.barcode === key ? { ...c, qty: c.qty + item.qty } : c)
-              return [...prev, { item: { ...item, barcode: key, id: key }, qty: item.qty }]
-            })
-          }} />
-
-          {/* ── Cart items ── */}
+          <ManualItemRow onAdd={handleManualAdd} />
           <div className="card" style={{ padding: 0, overflow: 'hidden', marginTop: 12 }}>
             {cart.length === 0 ? (
               <div className="empty-state" style={{ padding: '24px' }}>
@@ -579,64 +556,31 @@ export default function ScanPage() {
                 <div className="empty-state-text">Scan items or add manually above</div>
               </div>
             ) : cart.map((c, i) => (
-              <div key={c.item.barcode} style={{
-                display: 'flex', alignItems: 'center',
-                padding: '12px 14px',
-                borderBottom: i < cart.length - 1 ? '1px solid var(--border)' : 'none',
-                gap: 10,
-              }}>
-                {/* Manual item indicator */}
+              <div key={c.item.barcode} style={{ display: 'flex', alignItems: 'center', padding: '12px 14px', borderBottom: i < cart.length - 1 ? '1px solid var(--border)' : 'none', gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ fontWeight: 600, fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {c.item.name}
-                    </div>
+                    <div style={{ fontWeight: 600, fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.item.name}</div>
                     {String(c.item.barcode).startsWith('manual-') && (
-                      <span style={{ fontSize: '0.6rem', fontWeight: 700, background: '#fef3c7', color: '#92400e', borderRadius: 99, padding: '1px 6px', flexShrink: 0 }}>
-                        MANUAL
-                      </span>
+                      <span style={{ fontSize: '0.6rem', fontWeight: 700, background: '#fef3c7', color: '#92400e', borderRadius: 99, padding: '1px 6px', flexShrink: 0 }}>MANUAL</span>
                     )}
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace', marginTop: 2 }}>
-                    ₹{Number(c.item.price).toFixed(2)} × {c.qty}
-                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace', marginTop: 2 }}>₹{Number(c.item.price).toFixed(2)} × {c.qty}</div>
                 </div>
-
-                {/* Qty controls */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <button
-                    style={{ width: 30, height: 30, borderRadius: '50%', border: '1.5px solid var(--border)', background: 'none', cursor: 'pointer', fontSize: '1.1rem', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                    onClick={() => handleRemoveCartItem(c.item.barcode)}
-                  >−</button>
+                  <button style={{ width: 30, height: 30, borderRadius: '50%', border: '1.5px solid var(--border)', background: 'none', cursor: 'pointer', fontSize: '1.1rem', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => handleRemoveCartItem(c.item.barcode)}>−</button>
                   <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, minWidth: 22, textAlign: 'center', fontSize: '0.95rem' }}>{c.qty}</span>
-                  <button
-                    style={{ width: 30, height: 30, borderRadius: '50%', border: '1.5px solid var(--border)', background: 'none', cursor: 'pointer', fontSize: '1.1rem', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                    onClick={() => setCart(prev => prev.map(cc => cc.item.barcode === c.item.barcode ? { ...cc, qty: cc.qty + 1 } : cc))}
-                  >+</button>
+                  <button style={{ width: 30, height: 30, borderRadius: '50%', border: '1.5px solid var(--border)', background: 'none', cursor: 'pointer', fontSize: '1.1rem', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setCart(prev => prev.map(cc => cc.item.barcode === c.item.barcode ? { ...cc, qty: cc.qty + 1 } : cc))}>+</button>
                 </div>
-
-                {/* Line total */}
-                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '0.9rem', minWidth: 72, textAlign: 'right' }}>
-                  ₹{(Number(c.item.price) * c.qty).toFixed(2)}
-                </div>
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '0.9rem', minWidth: 72, textAlign: 'right' }}>₹{(Number(c.item.price) * c.qty).toFixed(2)}</div>
               </div>
             ))}
           </div>
-
-          {/* ── Actions ── */}
           <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-            <button className="btn btn-secondary btn-full" onClick={() => setStep('scanning')}>
-              📷 Scan More
-            </button>
-            <button
-              className="btn btn-primary btn-full btn-lg"
-              onClick={handleSubmit}
-              disabled={submitting || cart.length === 0}
-            >
+            <button className="btn btn-secondary btn-full" onClick={() => setStep('scanning')}>📷 Scan More</button>
+            <button className="btn btn-primary btn-full btn-lg" onClick={handleSubmit} disabled={submitting || cart.length === 0}>
               {submitting ? '⏳ Submitting…' : '✓ Submit Bill'}
             </button>
           </div>
-
           <div style={{ textAlign: 'center', marginTop: 10, color: 'var(--text-muted)', fontSize: '0.75rem' }}>
             Adjust quantities · Add items manually · Submit when ready
           </div>
