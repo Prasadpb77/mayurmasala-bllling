@@ -243,6 +243,7 @@ function ManualAddModal({ onAdd, onClose }) {
                   type="number" min="1"
                   value={qty}
                   onChange={e => setQty(Math.max(1, parseInt(e.target.value) || 1))}
+                  onFocus={e => e.target.select()}
                 />
                 <button
                   style={{
@@ -337,7 +338,7 @@ function ManualItemRow({ onAdd }) {
                 <label className="form-label">Qty</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                   <button className="btn btn-secondary btn-sm" style={{ width: 26, padding: 0, flexShrink: 0 }} onClick={() => setQty(q => Math.max(1, q - 1))}>−</button>
-                  <input className="form-input" type="number" min="1" value={qty} onChange={e => setQty(Math.max(1, parseInt(e.target.value) || 1))} style={{ width: 30, minWidth: 0, textAlign: 'center', padding: '12px 2px', fontWeight: 700, boxSizing: 'border-box' }} />
+                  <input className="form-input" type="number" min="1" value={qty} onChange={e => setQty(Math.max(1, parseInt(e.target.value) || 1))} onFocus={e => e.target.select()} style={{ width: 30, minWidth: 0, textAlign: 'center', padding: '12px 2px', fontWeight: 700, boxSizing: 'border-box' }} />
                   <button className="btn btn-secondary btn-sm" style={{ width: 26, padding: 0, flexShrink: 0 }} onClick={() => setQty(q => q + 1)}>+</button>
                 </div>
               </div>
