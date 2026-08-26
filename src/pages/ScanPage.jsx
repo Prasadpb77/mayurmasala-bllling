@@ -606,9 +606,12 @@ export default function ScanPage() {
           </div>
         </div>
 
-        {/* ── Camera area — takes all available space ── */}
+        {/* ── Camera area — fixed, sufficient height for scanning; cart list gets remaining priority space ── */}
         <div style={{
-          flex: 1,
+          flex: '0 0 auto',
+          height: '38vh',
+          minHeight: 230,
+          maxHeight: 320,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -696,39 +699,37 @@ export default function ScanPage() {
           )}
         </div>
 
-        {/* ── Collapsed mini cart strip at bottom ── */}
+        {/* ── Cart summary strip — now the priority area, fills remaining space, shows full list ── */}
         {cart.length > 0 && (
           <div style={{
-            flexShrink: 0,
+            flex: '1 1 auto',
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
             background: 'rgba(0,0,0,0.7)',
             backdropFilter: 'blur(8px)',
             borderTop: '1px solid rgba(255,255,255,0.08)',
-            padding: '8px 12px',
-            maxHeight: 120,
-            overflowY: 'auto',
           }}>
-            <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 5 }}>
+            <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.07em', padding: '8px 12px 4px', flexShrink: 0 }}>
               Cart — {cartCount} item{cartCount !== 1 ? 's' : ''}
             </div>
-            {cart.slice(-4).map(c => (
-              <div key={c.item.barcode} style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '3px 0',
-              }}>
-                <span style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.8rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {c.item.name}{String(c.item.barcode).startsWith('manual-') ? ' ✏️' : ''}
-                </span>
-                <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', marginLeft: 8 }}>×{c.qty}</span>
-                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '0.8rem', color: 'var(--teal, #00c9a7)', marginLeft: 10, minWidth: 60, textAlign: 'right' }}>
-                  ₹{(c.item.price * c.qty).toFixed(2)}
-                </span>
-              </div>
-            ))}
-            {cart.length > 4 && (
-              <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: '0.72rem', textAlign: 'center', paddingTop: 3 }}>
-                +{cart.length - 4} more
-              </div>
-            )}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px 8px' }}>
+              {cart.map(c => (
+                <div key={c.item.barcode} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '5px 0',
+                  borderBottom: '1px solid rgba(255,255,255,0.05)',
+                }}>
+                  <span style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.8rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {c.item.name}{String(c.item.barcode).startsWith('manual-') ? ' ✏️' : ''}
+                  </span>
+                  <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', marginLeft: 8 }}>×{c.qty}</span>
+                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '0.8rem', color: 'var(--teal, #00c9a7)', marginLeft: 10, minWidth: 60, textAlign: 'right' }}>
+                    ₹{(c.item.price * c.qty).toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
